@@ -14,6 +14,8 @@
 
 ## ติดตั้ง (สำหรับคนทั่วไป)
 
+เว็บ: **https://gameinwza.github.io/lagoon-web/**
+
 1. โหลด `Lagoon-x.y.z.zip` ล่าสุดจาก [Releases](https://github.com/Gameinwza/lagoon/releases/latest) แล้วแตกไฟล์
 2. ลาก `Lagoon.app` ไปไว้ใน **Applications**
 3. แอปยังไม่ได้ notarize กับ Apple เปิดครั้งแรก macOS จะเตือนว่าตรวจสอบนักพัฒนาไม่ได้ ให้ไปที่
