@@ -83,6 +83,7 @@ struct IslandView: View {
             ForEach(bt.devices, id: \.self) { d in
                 HStack(spacing: 3) {
                     Image(systemName: d.icon).font(.system(size: 12, weight: .medium))
+                        .symbolEffect(.bounce, value: bt.devices.count)
                     if let n = d.battery?.headline {
                         Text("\(n)%").font(.system(size: 10, weight: .semibold).monospacedDigit())
                             .foregroundStyle(n <= 20 ? .red : .white.opacity(0.85))
@@ -195,12 +196,7 @@ struct IslandView: View {
             }
             .frame(maxWidth: .infinity)
             .overlay(alignment: .leading) {
-                Button { SettingsWindow.show() } label: {
-                    Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(.gray)
-                        .frame(width: 40, height: 32).contentShape(Capsule())
-                }
-                .buttonStyle(PressStyle()).help("ตั้งค่า Lagoon").accessibilityLabel("ตั้งค่า Lagoon")
-                .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
+                GearButton()
                 .offset(x: -12)
             }
             .overlay(alignment: .trailing) {
@@ -208,7 +204,11 @@ struct IslandView: View {
                     Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showBT.toggle() } } label: {
                         Group {
                             if bt.devices.isEmpty || !showDevices {
-                                Image(systemName: audio.icon).font(.system(size: 14)).contentTransition(.symbolEffect(.replace))
+                                Image(systemName: audio.muted ? "speaker.slash.fill" : "speaker.wave.3.fill",
+                                      variableValue: Double(audio.volume))  // waves fill with the level
+                                    .font(.system(size: 14)).frame(width: 22)
+                                    .contentTransition(.symbolEffect(.replace))
+                                    .symbolEffect(.bounce, value: audio.muted)
                             } else { deviceIcons }
                         }
                         .padding(.horizontal, 8).frame(minHeight: 32)
@@ -246,12 +246,7 @@ struct IslandView: View {
     }
 
     private func btn(_ icon: String, _ label: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon).font(.title3)
-                .contentTransition(.symbolEffect(.replace))  // play ↔ pause morphs instead of popping
-                .frame(width: 44, height: 32)
-        }
-        .buttonStyle(PressStyle()).accessibilityLabel(label)
+        IconButton(icon: icon, label: label, action: action)
     }
 
     private func fmt(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
@@ -395,4 +390,39 @@ struct LiftStyle: ButtonStyle {
     /// Content must start below this or the camera covers it.
     static var topInset: CGFloat { present ? screen.safeAreaInsets.top : 10 }
     static let floatGap: CGFloat = 6
+}
+
+/// Transport button whose symbol bounces on every press, so a tap visibly lands.
+struct IconButton: View {
+    var icon: String
+    var label: String
+    var action: () -> Void
+    @State private var taps = 0
+
+    var body: some View {
+        Button { taps += 1; action() } label: {
+            Image(systemName: icon).font(.title3)
+                .contentTransition(.symbolEffect(.replace))  // play ↔ pause morphs instead of popping
+                .symbolEffect(.bounce.down, value: taps)
+                .frame(width: 44, height: 32)
+        }
+        .buttonStyle(PressStyle()).accessibilityLabel(label)
+    }
+}
+
+/// Settings gear: turns a little on hover and brightens, opens Lagoon's settings.
+struct GearButton: View {
+    @State private var hover = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button { SettingsWindow.show() } label: {
+            Image(systemName: "gearshape.fill").font(.system(size: 14))
+                .foregroundStyle(hover ? .white : .gray)
+                .rotationEffect(.degrees(hover && !reduceMotion ? 60 : 0))
+                .frame(width: 40, height: 32).contentShape(Capsule())
+        }
+        .buttonStyle(PressStyle()).help("ตั้งค่า Lagoon").accessibilityLabel("ตั้งค่า Lagoon")
+        .onHover { h in withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) { hover = h } }
+    }
 }
