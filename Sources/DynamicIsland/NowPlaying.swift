@@ -47,8 +47,15 @@ final class NowPlaying: ObservableObject {
                 MainActor.assumeIsolated { self?.refreshNow() }  // queue: .main, so this is the main thread
             }
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            Task { @MainActor in self.poll() }
+        // Browsers don't announce play/pause, so while a YouTube video is showing poll every 0.3 s;
+        // otherwise once a second is plenty (Spotify/Music push changes via notifications).
+        var last = Date()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
+            Task { @MainActor in
+                guard self.track?.isVideo == true || Date().timeIntervalSince(last) >= 1 else { return }
+                last = Date()
+                self.poll()
+            }
         }
     }
 

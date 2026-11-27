@@ -191,16 +191,26 @@ struct IslandView: View {
 struct Bars: View {
     var playing: Bool
     var color: Color
+    @State private var changedAt = Date.distantPast
+
+    /// 0…1 wave height: eases in over 0.3 s on play and fades out over 0.6 s on pause.
+    private func amp(_ t: Date) -> Double {
+        let dt = t.timeIntervalSince(changedAt)
+        return playing ? min(1, dt / 0.3) : max(0, 1 - dt / 0.6)
+    }
+
     var body: some View {
-        TimelineView(.animation(paused: !playing)) { tl in
-            let t = tl.date.timeIntervalSinceReferenceDate
+        // Keep ticking while fading out; the next re-render after the fade pauses it.
+        TimelineView(.animation(paused: !playing && Date().timeIntervalSince(changedAt) > 0.7)) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate, a = amp(tl.date)
             HStack(spacing: 2) {
                 ForEach(0..<4) { i in
                     Capsule().fill(color)
-                        .frame(width: 3, height: playing ? 4 + 10 * abs(sin(t * 4 + Double(i))) : 4)
+                        .frame(width: 3, height: 4 + 10 * a * abs(sin(t * 4 + Double(i))))
                 }
             }.frame(height: 16)
         }
+        .onChange(of: playing) { changedAt = Date() }
     }
 }
 
