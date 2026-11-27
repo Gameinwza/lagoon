@@ -54,6 +54,11 @@ final class NowPlaying: ObservableObject {
         }
         // Spotify/Music push changes (above), so they're only re-checked every 10 s as a fallback.
         // Browsers don't, so YouTube is checked every 0.3 s while a video is playing, 2 s while one is paused, else every 8 s.
+        // Switching to a browser re-plans the timer at once instead of waiting out the 8 s idle gap.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                          object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
         tick()
     }
 
@@ -61,14 +66,26 @@ final class NowPlaying: ObservableObject {
 
     /// One-shot timer that sleeps until the next check is due, so idle means ~1 wakeup every few seconds.
     private func tick() {
-        let browserGap: Double = track?.isVideo == true ? (track?.playing == true ? 0.3 : 2) : 8
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        let browserFront = Self.bundles.dropFirst(2).contains { $0.1 == front }
+        // Playing video 0.3 s; paused video 2 s; browser in front (user may be opening one) 1 s; else 8 s.
+        let browserGap: Double = track?.isVideo == true ? (track?.playing == true ? 0.3 : 2) : (browserFront ? 1 : 8)
         let now = Date()
         let players = now.timeIntervalSince(lastPlayers) >= 10
         let browsers = now.timeIntervalSince(lastBrowsers) >= browserGap
         if players || browsers {
             if players { lastPlayers = now }
             lastBrowsers = now
-            poll(players: players)
+            if browserFront && !players && track?.isVideo != true, let app = Self.bundles.first(where: { $0.1 == front })?.0 {
+                // Cheap: only ask the front tab's URL; scan all tabs once it's a YouTube video.
+                queue.async {
+                    let tab = app == "Safari" ? "current tab" : "active tab"
+                    let url = Self.run("tell application \"\(app)\" to get URL of \(tab) of front window")?.stringValue ?? ""
+                    if url.contains("youtube.com/watch") { DispatchQueue.main.async { self.poll(players: false) } }
+                }
+            } else {
+                poll(players: players)
+            }
         }
         let wait = min(10 - now.timeIntervalSince(lastPlayers), browserGap - now.timeIntervalSince(lastBrowsers))
         timer?.invalidate()
