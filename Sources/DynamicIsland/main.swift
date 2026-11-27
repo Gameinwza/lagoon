@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ServiceManagement
 
 /// Shared hover state: driven by the mouse position, not SwiftUI's onHover,
 /// because the window ignores mouse events whenever the cursor is outside the island.
@@ -48,6 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.place()
         panel.orderFrontRegardless()
         np.start()
+        // Start automatically at login (shows under System Settings → General → Login Items).
+        if SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.panel.place() }

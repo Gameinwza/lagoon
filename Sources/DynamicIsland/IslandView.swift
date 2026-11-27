@@ -34,10 +34,17 @@ struct IslandView: View {
     }
 
     private func art(_ s: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: s / 4)
-            .fill(LinearGradient(colors: [accent, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-            .frame(width: s, height: s)
-            .overlay(Image(systemName: "music.note").font(.system(size: s * 0.45)).foregroundStyle(.white))
+        ZStack {
+            if let img = np.art {
+                Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                LinearGradient(colors: [accent, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
+                Image(systemName: "music.note").font(.system(size: s * 0.45)).foregroundStyle(.white)
+            }
+        }
+        .frame(width: s, height: s)
+        .clipShape(RoundedRectangle(cornerRadius: s / 4))
+        .animation(.easeInOut(duration: 0.25), value: np.art)
     }
 
     private func compact(_ t: Track) -> some View {
@@ -48,11 +55,18 @@ struct IslandView: View {
     private func full(_ t: Track) -> some View {
         VStack(spacing: 10) {
             HStack(spacing: 12) {
-                art(48)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(t.title).font(.headline).lineLimit(1)
-                    Text(t.artist).font(.subheadline).foregroundStyle(.gray).lineLimit(1)
+                Button { np.openInApp() } label: {
+                    HStack(spacing: 12) {
+                        art(48)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(t.title).font(.headline).lineLimit(1)
+                            Text(t.artist).font(.subheadline).foregroundStyle(.gray).lineLimit(1)
+                        }
+                    }.contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("เปิด \(t.title) ใน \(t.app)")
+                .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
                 Spacer()
                 Bars(playing: t.playing, color: accent)
             }

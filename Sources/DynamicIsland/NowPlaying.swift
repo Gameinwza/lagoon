@@ -20,6 +20,8 @@ struct Track: Equatable {
 @MainActor
 final class NowPlaying: ObservableObject {
     @Published var track: Track?
+    @Published var art: NSImage?
+    private var artKey = ""
     private var timer: Timer?
     // AppleScript is synchronous (tens of ms per call); keep it off the main thread so animations don't stutter.
     private let queue = DispatchQueue(label: "nowplaying.applescript")
@@ -49,6 +51,7 @@ final class NowPlaying: ObservableObject {
             DispatchQueue.main.async {
                 self.busy = false
                 if !Self.same(found, self.track) { self.track = found }
+                self.loadArtIfNeeded()
             }
         }
     }
@@ -78,6 +81,54 @@ final class NowPlaying: ObservableObject {
         let num = { (s: String) in Double(s.replacingOccurrences(of: ",", with: ".")) ?? 0 }
         return Track(app: app, title: p[0], artist: p[1], playing: p[2] == "true",
                      position: num(p[3]), duration: num(p[4]))
+    }
+
+    /// Fetch cover art only when the song changes, never on every poll.
+    private func loadArtIfNeeded() {
+        guard let t = track else { artKey = ""; art = nil; return }
+        let key = t.app + t.title + t.artist
+        guard key != artKey else { return }
+        artKey = key
+        art = nil
+        queue.async {
+            let img = Self.fetchArt(t.app)
+            DispatchQueue.main.async { if self.artKey == key { self.art = img } }
+        }
+    }
+
+    nonisolated private static func fetchArt(_ app: String) -> NSImage? {
+        var err: NSDictionary?
+        if app == "Spotify" {
+            // Spotify gives an https URL to the cover.
+            guard let s = NSAppleScript(source: "tell application \"Spotify\" to artwork url of current track")?
+                    .executeAndReturnError(&err).stringValue,
+                  let url = URL(string: s), url.scheme == "https",
+                  let data = try? Data(contentsOf: url) else { return nil }
+            return NSImage(data: data)
+        }
+        // Music returns the image bytes directly.
+        let d = NSAppleScript(source: "tell application \"Music\" to get raw data of artwork 1 of current track")?
+            .executeAndReturnError(&err).data
+        return d.flatMap(NSImage.init(data:))
+    }
+
+    /// Show the current song in its app.
+    func openInApp() {
+        guard let app = track?.app else { return }
+        queue.async {
+            var err: NSDictionary?
+            if app == "Spotify" {
+                // spotify:track:... opens that song's page in Spotify.
+                if let s = NSAppleScript(source: "tell application \"Spotify\" to spotify url of current track")?
+                        .executeAndReturnError(&err).stringValue,
+                   let url = URL(string: s), url.scheme == "spotify" {
+                    DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+                }
+            } else {
+                NSAppleScript(source: "tell application \"Music\"\nactivate\nreveal current track\nend tell")?
+                    .executeAndReturnError(&err)
+            }
+        }
     }
 
     func send(_ command: String) {
