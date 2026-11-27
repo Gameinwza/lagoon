@@ -191,7 +191,7 @@ final class NowPlaying: ObservableObject {
 
     /// Fetch cover art only when the song changes, never on every poll.
     private func loadArtIfNeeded() {
-        guard let t = track else { artKey = ""; art = nil; return }
+        guard let t = track else { artKey = ""; return }  // keep the cover while the island fades out
         let key = t.app + t.title + t.artist
         guard key != artKey else { return }
         artKey = key

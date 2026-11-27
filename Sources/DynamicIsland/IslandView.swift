@@ -5,6 +5,9 @@ struct IslandView: View {
     @ObservedObject var state: IslandState
     @ObservedObject var bt: BluetoothWatcher
     @State private var showBT = false   // Bluetooth detail list inside the expanded card
+    @State private var lastTrack: Track?  // kept while the island fades out after the music stops
+    private var shown: Track? { np.track ?? lastTrack }
+    private var hidden: Bool { np.track == nil && banner == nil }
 
     private var expanded: Bool { state.hover && np.track != nil }
     private var banner: BTEvent? { expanded ? nil : bt.event }
@@ -15,7 +18,7 @@ struct IslandView: View {
         }
         if banner != nil { return CGSize(width: 340, height: Self.notch + 40) }
         // Device icons only appear in the expanded card, not here.
-        return np.track == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
+        return shown == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
     }
     private var accent: Color {
         if np.track?.isVideo == true { return .red }
@@ -28,12 +31,9 @@ struct IslandView: View {
                 UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 32 : banner != nil ? 22 : 14,
                                        bottomTrailingRadius: expanded ? 32 : banner != nil ? 22 : 14)
                     .fill(.black)
-                    // Nothing playing (or paused > 5 min) and no banner: fade the island away entirely.
-                    .opacity(np.track == nil && banner == nil ? 0 : 1)
-                    .animation(.easeInOut(duration: 0.5), value: np.track == nil && banner == nil)
                 if let e = banner {
                     btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
-                } else if let t = np.track {
+                } else if let t = shown {
                     if expanded {
                         full(t).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
                     } else {
@@ -42,6 +42,11 @@ struct IslandView: View {
                 }
             }
             .frame(width: size.width, height: size.height)
+            // Music closed (or paused > 5 min): shrink slightly and fade out, keeping the last song on
+            // screen while it goes so nothing pops.
+            .opacity(hidden ? 0 : 1)
+            .scaleEffect(hidden ? 0.92 : 1, anchor: .top)
+            .animation(.easeInOut(duration: 0.8), value: hidden)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -50,6 +55,11 @@ struct IslandView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.devices)
         .onChange(of: size, initial: true) { _, s in state.size = s }
         .onChange(of: expanded) { _, e in if !e { showBT = false } }
+        .onChange(of: np.track) { _, t in
+            if let t { lastTrack = t; return }
+            // Forget the old song once the fade-out has finished (unless something started meanwhile).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { if np.track == nil { lastTrack = nil } }
+        }
     }
 
     /// Small icons for every connected Bluetooth device (hover shows the name).
