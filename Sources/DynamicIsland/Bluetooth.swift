@@ -160,7 +160,13 @@ final class BluetoothWatcher: ObservableObject {
             return String(line[r]).components(separatedBy: " ").last
         }
         guard let prim = grab(#"Prim (Left|Right)"#), let pState = grab(#"Plcm P [A-Za-z]+"#) else { return nil }
-        let sState = grab(#" S [A-Za-z]+"#) ?? pState
+        let other = prim == "Left" ? "R" : "L"
+        // Battery "L 80%" (no minus) means that bud is charging, i.e. sitting in the case.
+        // bluetoothd often omits S when only one bud is out, so use that to tell.
+        // Partial lines ("Battery R -75%" only) come paired with a full one; skip them.
+        guard grab(#"Battery .*\b\#(other) -?[0-9]+%"#) != nil else { return nil }
+        let otherCharging = grab(#"Battery .*\b\#(other) [0-9]+%"#) != nil
+        let sState = grab(#" S [A-Za-z]+"#) ?? (otherCharging ? "InCase" : pState)
         let primIn = pState == "InEar", secIn = sState == "InEar"
         return prim == "Left" ? (primIn, secIn) : (secIn, primIn)
     }
