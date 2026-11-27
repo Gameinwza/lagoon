@@ -16,11 +16,13 @@ struct IslandView: View {
     private var size: CGSize {
         if expanded {
             let rows = showBT ? bt.devices.reduce(CGFloat(14)) { $0 + ($1.battery != nil ? 96 : 26) } : 0
-            return CGSize(width: 380, height: 150 + rows)
+            return CGSize(width: 380, height: 118 + Notch.topInset + rows)
         }
-        if banner != nil { return CGSize(width: 340, height: Self.notch + 40) }
+        if banner != nil { return CGSize(width: 340, height: Notch.topInset + 40) }
         // Device icons only appear in the expanded card, not here.
-        return shown == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
+        // On a notch the art and wave sit either side of the camera, so wider notches get a wider island.
+        let compact = Notch.present ? max(280, Notch.width + 100) : 260
+        return shown == nil ? CGSize(width: 200, height: 32) : CGSize(width: compact, height: 32)
     }
     private var accent: Color {
         if np.track?.isVideo == true { return .red }
@@ -28,14 +30,17 @@ struct IslandView: View {
     }
 
     var body: some View {
-        island.contextMenu { Button("ตั้งค่า…") { SettingsWindow.show() } }
+        let _ = state.screenChanges  // re-layout when displays change
+        return island.contextMenu { Button("ตั้งค่า…") { SettingsWindow.show() } }
     }
 
     private var island: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 32 : banner != nil ? 22 : 14,
-                                       bottomTrailingRadius: expanded ? 32 : banner != nil ? 22 : 14)
+                // Notch: square top that merges with the camera housing. No notch: a floating, fully rounded pill.
+                let r: CGFloat = expanded ? 32 : banner != nil ? 22 : Notch.present ? 14 : 16
+                let top: CGFloat = Notch.present ? 0 : r
+                UnevenRoundedRectangle(topLeadingRadius: top, bottomLeadingRadius: r, bottomTrailingRadius: r, topTrailingRadius: top)
                     .fill(.black)
                 if let e = banner {
                     btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -48,6 +53,8 @@ struct IslandView: View {
                 }
             }
             .frame(width: size.width, height: size.height)
+            .shadow(color: .black.opacity(Notch.present ? 0 : 0.3), radius: 10, y: 4)
+            .padding(.top, Notch.present ? 0 : Notch.floatGap)
             // Music closed (or paused > 5 min): shrink slightly and fade out, keeping the last song on
             // screen while it goes so nothing pops.
             .opacity(hidden ? 0 : 1)
@@ -113,8 +120,6 @@ struct IslandView: View {
         }
     }
 
-    /// Height of the camera notch; content must sit below it or the hardware covers it.
-    static let notch: CGFloat = NSScreen.screens.map(\.safeAreaInsets.top).max().flatMap { $0 > 0 ? $0 : nil } ?? 32
 
     private func btBanner(_ e: BTEvent) -> some View {
         HStack(spacing: 8) {
@@ -126,7 +131,7 @@ struct IslandView: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 18).frame(height: 40)
-        .padding(.top, Self.notch)  // drop the row below the notch
+        .padding(.top, Notch.topInset)  // drop the row below the notch
         .accessibilityElement(children: .combine)
     }
 
@@ -196,7 +201,7 @@ struct IslandView: View {
             if showBT { btList.transition(.opacity) }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 22).padding(.top, 36).padding(.bottom, 14)
+        .padding(.horizontal, 22).padding(.top, Notch.topInset + 4).padding(.bottom, 14)
     }
 
     private func btn(_ icon: String, _ label: String, _ action: @escaping () -> Void) -> some View {
@@ -332,4 +337,21 @@ struct LiftStyle: ButtonStyle {
             .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
             .onHover { hover = $0; $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
     }
+}
+
+/// Geometry of the screen the island lives on. Notched MacBooks: the island hugs the camera housing.
+/// Other screens (external monitors, Macs without a notch): a floating pill just below the top edge.
+@MainActor enum Notch {
+    static var screen: NSScreen {
+        NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
+    }
+    static var present: Bool { screen.safeAreaInsets.top > 0 }
+    /// Camera housing width, from the menu-bar areas either side of it (0 without a notch).
+    static var width: CGFloat {
+        guard present, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea else { return 0 }
+        return screen.frame.width - l.width - r.width
+    }
+    /// Content must start below this or the camera covers it.
+    static var topInset: CGFloat { present ? screen.safeAreaInsets.top : 10 }
+    static let floatGap: CGFloat = 6
 }

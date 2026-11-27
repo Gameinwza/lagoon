@@ -1,4 +1,7 @@
 import AppKit
+import os
+
+private let npLog = Logger(subsystem: "com.gameinwza.lagoon", category: "np")
 
 struct Track: Equatable {
     var app: String      // "Spotify", "Music", "Google Chrome", "Brave Browser" or "Safari"
@@ -150,11 +153,16 @@ final class NowPlaying: ObservableObject {
 
     nonisolated private static func run(_ src: String) -> NSAppleEventDescriptor? {
         var err: NSDictionary?
-        if let s = compiled[src] { return s.executeAndReturnError(&err) }
-        guard let s = NSAppleScript(source: src) else { return nil }
-        // One-off commands (seek positions, tab refs) vary; don't let them grow the cache forever.
-        if compiled.count < 32, s.compileAndReturnError(&err) { compiled[src] = s }
-        return s.executeAndReturnError(&err)
+        let s: NSAppleScript
+        if let c = compiled[src] { s = c } else {
+            guard let n = NSAppleScript(source: src) else { return nil }
+            // One-off commands (seek positions, tab refs) vary; don't let them grow the cache forever.
+            if compiled.count < 32, n.compileAndReturnError(&err) { compiled[src] = n }
+            s = n
+        }
+        let r = s.executeAndReturnError(&err)
+        if let err { npLog.error("AppleScript \(err[NSAppleScript.errorNumber] as? Int ?? 0, privacy: .public): \(err[NSAppleScript.errorMessage] as? String ?? "", privacy: .public)") }
+        return r
     }
 
     nonisolated private static func num(_ s: String) -> Double {
@@ -207,6 +215,8 @@ final class NowPlaying: ObservableObject {
                 set r to ""
                 try
                   set r to \(jsCall(app, readJS, tab: "t"))
+                on error
+                  set r to "JSOFF"
                 end try
                 set hit to (id of w as text) & "\\n" & i & "\\n" & (item i of urls) & "\\n" & (\(titleProp) of t) & "\\n" & r
                 if r starts with "1|" then return hit
@@ -226,7 +236,11 @@ final class NowPlaying: ObservableObject {
         let js = p.count > 4 ? p[4].components(separatedBy: "|") : []
         var t = Track(app: app, title: title, artist: "YouTube", playing: false, position: 0, duration: 0,
                       tab: (win, idx), artURL: vid.flatMap { URL(string: "https://i.ytimg.com/vi/\($0)/hqdefault.jpg") })
-        if js.count == 4 {
+        if p.count > 4, p[4] == "JSOFF" {
+            // The browser blocks JavaScript from Apple Events, so play state is unknown: stay visible with a fix-it hint.
+            t.playing = true
+            t.artist = "เปิด View › Developer › Allow JavaScript…"
+        } else if js.count == 4 {
             t.playing = js[0] == "1"
             t.position = num(js[1])
             t.duration = num(js[2])

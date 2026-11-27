@@ -8,6 +8,7 @@ import ServiceManagement
 final class IslandState: ObservableObject {
     @Published var hover = false
     var size = CGSize(width: 200, height: 32)
+    @Published var screenChanges = 0
 }
 
 /// Borderless panel pinned to the top-center of the notched screen, above the menu bar.
@@ -28,9 +29,7 @@ final class IslandPanel: NSPanel {
         contentView = view
     }
 
-    var screenForIsland: NSScreen {
-        NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main!
-    }
+    var screenForIsland: NSScreen { Notch.screen }
 
     func place() {
         let f = screenForIsland.frame, s = Self.maxSize
@@ -57,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Pref.applyLaunchAtLogin()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.panel.place() }
+            Task { @MainActor in self?.panel.place(); self?.state.screenChanges += 1 }
         }
         // React to mouse movement events instead of polling (a 60 Hz timer cost ~several % CPU idle).
         // Global monitors for mouse moves need no Accessibility permission.
