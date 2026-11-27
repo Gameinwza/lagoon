@@ -43,6 +43,8 @@ final class BluetoothWatcher: ObservableObject {
     private var audio: [AudioDeviceID: String]?
     private var batteries: [String: Battery] = [:]
     private var batteryBusy = false
+    private var ears: (left: Bool, right: Bool)?   // which AirPods are in an ear, from bluetoothd's log
+    private var earLog: Process?
 
     func start() {
         scan()
@@ -57,6 +59,7 @@ final class BluetoothWatcher: ObservableObject {
             Task { @MainActor in self?.scan() }
         }
         refreshBattery()
+        watchEars()
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshBattery() }
         }
@@ -81,7 +84,7 @@ final class BluetoothWatcher: ObservableObject {
         // AirPods show up twice in CoreAudio (mic + speaker); dedupe by name.
         var seen = Set<String>()
         let list = (headphones + others).filter { seen.insert($0.name).inserted }.sorted { $0.name < $1.name }
-            .map { d in var d = d; d.battery = batteries[d.name]; return d }
+            .map { d in var d = d; d.battery = batteries[d.name]; d.icon = earIcon(d.icon); return d }
         if list != devices { devices = list }
     }
 
@@ -123,6 +126,53 @@ final class BluetoothWatcher: ObservableObject {
             }
         }
         return out
+    }
+
+    /// There is no API for AirPods in-ear state, but bluetoothd logs it, e.g.
+    /// "Plcm P InEar S InCase M Enabled, Prim Right" (P = primary bud, S = the other; S omitted = same as P).
+    /// shortcut: parses a private log line, so a macOS update can break it; the icon then just stays "both".
+    private func watchEars() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+        p.arguments = ["stream", "--style", "compact", "--predicate",
+                       #"process == "bluetoothd" AND eventMessage CONTAINS "Plcm P ""#]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
+            guard let text = String(data: h.availableData, encoding: .utf8) else { return }
+            for line in text.split(separator: "\n") {
+                guard let e = Self.parseEars(String(line)) else { continue }
+                DispatchQueue.main.async {
+                    guard let self, self.ears?.left != e.left || self.ears?.right != e.right else { return }
+                    self.ears = e
+                    self.publishList()
+                }
+            }
+        }
+        try? p.run()
+        earLog = p
+    }
+
+    nonisolated static func parseEars(_ line: String) -> (left: Bool, right: Bool)? {
+        func grab(_ pattern: String) -> String? {
+            guard let r = line.range(of: pattern, options: .regularExpression) else { return nil }
+            return String(line[r]).components(separatedBy: " ").last
+        }
+        guard let prim = grab(#"Prim (Left|Right)"#), let pState = grab(#"Plcm P [A-Za-z]+"#) else { return nil }
+        let sState = grab(#" S [A-Za-z]+"#) ?? pState
+        let primIn = pState == "InEar", secIn = sState == "InEar"
+        return prim == "Left" ? (primIn, secIn) : (secIn, primIn)
+    }
+
+    private func earIcon(_ base: String) -> String {
+        guard base == "airpods", let e = ears else { return base }
+        switch (e.left, e.right) {
+        case (true, false): return "airpod.left"
+        case (false, true): return "airpod.right"
+        case (false, false): return "airpods.chargingcase"
+        default: return "airpods"
+        }
     }
 
     private static func isAudio(_ d: IOBluetoothDevice) -> Bool {
