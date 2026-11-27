@@ -42,16 +42,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let np = NowPlaying()
     let state = IslandState()
     let bt = BluetoothWatcher()
+    let audio = OutputAudio()
     var panel: IslandPanel!
 
     func applicationDidFinishLaunching(_ n: Notification) {
         Pref.register()
-        panel = IslandPanel(view: NSHostingView(rootView: IslandView(np: np, state: state, bt: bt)))
+        panel = IslandPanel(view: NSHostingView(rootView: IslandView(np: np, state: state, bt: bt, audio: audio)))
         panel.place()
         panel.orderFrontRegardless()
         TopSpace.add(panel)
         np.start()
         bt.start()
+        audio.start()
         // Start automatically at login (shows under System Settings → General → Login Items).
         Pref.applyLaunchAtLogin()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,

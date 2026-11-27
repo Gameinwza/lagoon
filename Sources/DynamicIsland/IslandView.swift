@@ -4,6 +4,8 @@ struct IslandView: View {
     @ObservedObject var np: NowPlaying
     @ObservedObject var state: IslandState
     @ObservedObject var bt: BluetoothWatcher
+    @ObservedObject var audio: OutputAudio
+    @State private var showVol = false   // volume slider row inside the expanded card
     @AppStorage(Pref.waveColor) private var waveColor = "blue"
     @AppStorage(Pref.deviceIcons) private var showDevices = true
     @State private var showBT = false   // Bluetooth detail list inside the expanded card
@@ -15,7 +17,8 @@ struct IslandView: View {
     private var banner: BTEvent? { expanded ? nil : bt.event }
     private var size: CGSize {
         if expanded {
-            let rows = showBT ? bt.devices.reduce(CGFloat(14)) { $0 + ($1.battery != nil ? 96 : 26) } : 0
+            var rows: CGFloat = showVol ? 50 : 0
+            if showBT { rows += bt.devices.isEmpty ? 40 : bt.devices.reduce(CGFloat(14)) { $0 + ($1.battery != nil ? 96 : 26) } }
             return CGSize(width: 380, height: 118 + Notch.topInset + rows)
         }
         if banner != nil { return CGSize(width: 340, height: Notch.topInset + 40) }
@@ -67,7 +70,7 @@ struct IslandView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.event)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.devices)
         .onChange(of: size, initial: true) { _, s in state.size = s }
-        .onChange(of: expanded) { _, e in if !e { showBT = false } }
+        .onChange(of: expanded) { _, e in if !e { showBT = false; showVol = false } }
         .onChange(of: np.track) { _, t in
             if let t { lastTrack = t; return }
             // Forget the old song once the fade-out has finished (unless something started meanwhile).
@@ -98,6 +101,14 @@ struct IslandView: View {
     private var btList: some View {
         VStack(spacing: 8) {
             Divider().overlay(Color.white.opacity(0.15))
+            if bt.devices.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "hifispeaker.fill").frame(width: 18)
+                    Text(audio.deviceName).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    Spacer()
+                    Text("ลำโพงที่ใช้อยู่").font(.system(size: 12)).foregroundStyle(.gray)
+                }
+            }
             ForEach(bt.devices, id: \.self) { d in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
@@ -170,6 +181,12 @@ struct IslandView: View {
                 .accessibilityLabel("เปิด \(t.title) ใน \(t.app)")
                 Spacer()
                 Bars(playing: t.playing, color: Pref.color(waveColor))
+                Button { SettingsWindow.show() } label: {
+                    Image(systemName: "gearshape.fill").font(.system(size: 13)).foregroundStyle(.gray)
+                        .frame(width: 26, height: 26).contentShape(Circle())
+                }
+                .buttonStyle(PressStyle()).help("ตั้งค่า Lagoon").accessibilityLabel("ตั้งค่า Lagoon")
+                .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
             }
             if t.duration > 0 { TimelineView(.animation(paused: !t.playing)) { tl in
                 let pos = t.position(at: tl.date)
@@ -185,10 +202,25 @@ struct IslandView: View {
                 btn("forward.fill", "ถัดไป") { np.send(.next) }
             }
             .frame(maxWidth: .infinity)
+            .overlay(alignment: .leading) {
+                Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showVol.toggle(); showBT = false } } label: {
+                    Image(systemName: audio.icon).font(.system(size: 14)).contentTransition(.symbolEffect(.replace))
+                        .frame(width: 40, height: 32)
+                        .background(showVol ? Color.white.opacity(0.15) : .clear, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("ระดับเสียง \(Int(audio.volume * 100))%")
+                .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
+                .offset(x: -12)
+            }
             .overlay(alignment: .trailing) {
-                if showDevices && !bt.devices.isEmpty {
-                    Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showBT.toggle() } } label: {
-                        deviceIcons.padding(.horizontal, 8).frame(minHeight: 32)
+                if showDevices {
+                    Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showBT.toggle(); showVol = false } } label: {
+                        Group {
+                            if bt.devices.isEmpty { Image(systemName: "hifispeaker.fill").font(.system(size: 14)) } else { deviceIcons }
+                        }
+                        .padding(.horizontal, 8).frame(minHeight: 32)
                             .background(showBT ? Color.white.opacity(0.15) : .clear, in: Capsule())
                             .contentShape(Capsule())
                     }
@@ -198,10 +230,29 @@ struct IslandView: View {
                     .offset(x: 12)  // a bit more breathing room from the Next button
                 }
             }
+            if showVol { volumeRow.transition(.opacity) }
             if showBT { btList.transition(.opacity) }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 22).padding(.top, Notch.topInset + 4).padding(.bottom, 14)
+    }
+
+    /// Mute toggle + live volume slider for the current output device.
+    private var volumeRow: some View {
+        VStack(spacing: 8) {
+            Divider().overlay(Color.white.opacity(0.15))
+            HStack(spacing: 10) {
+                Button { audio.toggleMute() } label: {
+                    Image(systemName: audio.muted ? "speaker.slash.fill" : "speaker.fill").font(.system(size: 13))
+                        .contentTransition(.symbolEffect(.replace)).frame(width: 24, height: 24).contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle()).accessibilityLabel(audio.muted ? "เปิดเสียง" : "ปิดเสียง")
+                Slider(value: Binding(get: { Double(audio.muted ? 0 : audio.volume) }, set: { audio.setVolume(Float($0)) }))
+                    .controlSize(.small).tint(.white).disabled(!audio.canSetVolume)
+                    .accessibilityLabel("ระดับเสียง")
+                Image(systemName: "speaker.wave.3.fill").font(.system(size: 13)).foregroundStyle(.gray)
+            }
+        }
     }
 
     private func btn(_ icon: String, _ label: String, _ action: @escaping () -> Void) -> some View {
