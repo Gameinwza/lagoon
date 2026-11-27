@@ -52,14 +52,18 @@ final class NowPlaying: ObservableObject {
                 MainActor.assumeIsolated { self?.refreshNow() }  // queue: .main, so this is the main thread
             }
         }
-        // Browsers don't announce play/pause, so while a YouTube video is showing poll every 0.3 s;
-        // otherwise once a second is plenty (Spotify/Music push changes via notifications).
-        var last = Date()
+        // Spotify/Music push changes (above), so they're only re-checked every 10 s as a fallback.
+        // Browsers don't, so YouTube is checked every 0.3 s while a video is showing, else every 2 s.
+        var lastPlayers = Date(), lastBrowsers = Date()
         timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
             Task { @MainActor in
-                guard self.track?.isVideo == true || Date().timeIntervalSince(last) >= 1 else { return }
-                last = Date()
-                self.poll()
+                let now = Date()
+                let players = now.timeIntervalSince(lastPlayers) >= 10
+                let browsers = self.track?.isVideo == true || now.timeIntervalSince(lastBrowsers) >= 2
+                guard players || browsers else { return }
+                if players { lastPlayers = now }
+                lastBrowsers = now
+                self.poll(players: players)
             }
         }
     }
@@ -70,7 +74,10 @@ final class NowPlaying: ObservableObject {
         ("Google Chrome", "com.google.Chrome"), ("Brave Browser", "com.brave.Browser"), ("Safari", "com.apple.Safari"),
     ]
 
-    private func poll() {
+    /// Last Spotify/Music result, reused by polls that only check browsers. Only touched on `queue`.
+    nonisolated(unsafe) private static var playerCache: [Track] = []
+
+    private func poll(players: Bool = true) {
         guard !busy else { return }
         // Never send AppleScript to a closed app: `tell` would launch it.
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
@@ -78,11 +85,20 @@ final class NowPlaying: ObservableObject {
         busy = true
         let gen = generation
         queue.async {
+            let isPlayer = { ["Spotify", "Music"].contains($0) }
+            if players {
+                Self.playerCache = apps.filter(isPlayer).compactMap(Self.queryPlayer)
+            }
+            // Cached player tracks may be stale on position; the view extrapolates it anyway.
             var found: Track?
-            for app in apps {
-                let t = ["Spotify", "Music"].contains(app) ? Self.queryPlayer(app) : Self.queryYouTube(app)
-                if let t, t.playing || found == nil { found = t }
-                if found?.playing == true { break }
+            for t in Self.playerCache where apps.contains(t.app) {
+                if t.playing || found == nil { found = t }
+            }
+            if found?.playing != true {
+                for app in apps where !isPlayer(app) {
+                    if let t = Self.queryYouTube(app), t.playing || found == nil { found = t }
+                    if found?.playing == true { break }
+                }
             }
             DispatchQueue.main.async {
                 self.busy = false
@@ -101,9 +117,17 @@ final class NowPlaying: ObservableObject {
         return a == b
     }
 
+    /// Compiled scripts, reused across polls. Compiling every second was the main idle-CPU cost:
+    /// macOS scans each newly compiled script with XProtect. Only touched from `queue` (serial).
+    nonisolated(unsafe) private static var compiled: [String: NSAppleScript] = [:]
+
     nonisolated private static func run(_ src: String) -> NSAppleEventDescriptor? {
         var err: NSDictionary?
-        return NSAppleScript(source: src)?.executeAndReturnError(&err)
+        if let s = compiled[src] { return s.executeAndReturnError(&err) }
+        guard let s = NSAppleScript(source: src) else { return nil }
+        // One-off commands (seek positions, tab refs) vary; don't let them grow the cache forever.
+        if compiled.count < 32, s.compileAndReturnError(&err) { compiled[src] = s }
+        return s.executeAndReturnError(&err)
     }
 
     nonisolated private static func num(_ s: String) -> Double {

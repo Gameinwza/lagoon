@@ -58,10 +58,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.panel.place() }
         }
-        // Cheap 60 Hz check of the cursor; needs no Accessibility permission.
-        Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.trackMouse() }
+        // React to mouse movement events instead of polling (a 60 Hz timer cost ~several % CPU idle).
+        // Global monitors for mouse moves need no Accessibility permission.
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged]
+        NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
+            MainActor.assumeIsolated { self?.trackMouse() }  // delivered on the main thread
         }
+        NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] e in
+            MainActor.assumeIsolated { self?.trackMouse() }
+            return e
+        }
+        panel.acceptsMouseMovedEvents = true
     }
 
     private func trackMouse() {

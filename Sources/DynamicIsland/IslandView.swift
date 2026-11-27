@@ -209,6 +209,7 @@ struct Bars: View {
     var playing: Bool
     var color: Color
     @State private var changedAt = Date.distantPast
+    @State private var settled = true   // true once the pause fade is over → stop redrawing
 
     /// 0…1 wave height: eases in over 0.3 s on play and fades out over 0.6 s on pause.
     private func amp(_ t: Date) -> Double {
@@ -217,8 +218,7 @@ struct Bars: View {
     }
 
     var body: some View {
-        // Keep ticking while fading out; the next re-render after the fade pauses it.
-        TimelineView(.animation(paused: !playing && Date().timeIntervalSince(changedAt) > 0.7)) { tl in
+        TimelineView(.animation(paused: !playing && settled)) { tl in
             let t = tl.date.timeIntervalSinceReferenceDate, a = amp(tl.date)
             HStack(spacing: 2) {
                 ForEach(0..<4) { i in
@@ -227,7 +227,13 @@ struct Bars: View {
                 }
             }.frame(height: 16)
         }
-        .onChange(of: playing) { changedAt = Date() }
+        .onChange(of: playing) {
+            changedAt = Date()
+            settled = false
+            if !playing {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { if !playing { settled = true } }
+            }
+        }
     }
 }
 

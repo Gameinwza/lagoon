@@ -150,8 +150,16 @@ final class BluetoothWatcher: ObservableObject {
                 }
             }
         }
+        // A previous instance killed without cleanup leaves its `log stream` behind; clear those first.
+        let kill = Process()
+        kill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        kill.arguments = ["-f", "eventMessage CONTAINS \"Plcm P \""]
+        try? kill.run(); kill.waitUntilExit()
         try? p.run()
         earLog = p
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: nil) { _ in
+            p.terminate()
+        }
     }
 
     nonisolated static func parseEars(_ line: String) -> (left: Bool, right: Bool)? {
