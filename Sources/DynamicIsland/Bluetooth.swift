@@ -227,7 +227,10 @@ final class BluetoothWatcher: ObservableObject {
     }
 
     private func post(_ name: String, icon: String, connected: Bool) {
-        if connected { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.refreshBattery() } }
+        if connected {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.refreshBattery() }
+            return  // macOS already shows its own popup on connect; we only announce disconnects
+        }
         log.notice("post \(name, privacy: .public) connected=\(connected, privacy: .public)")
         event = BTEvent(name: name, icon: icon, connected: connected)
         hideWork?.cancel()
