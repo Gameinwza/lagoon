@@ -40,6 +40,13 @@ final class NowPlaying: ObservableObject {
 
     func start() {
         poll()
+        // Spotify and Music announce every play/pause/skip (media keys included); refresh at once
+        // instead of waiting for the next 1 s poll.
+        for name in ["com.spotify.client.PlaybackStateChanged", "com.apple.Music.playerInfo"] {
+            DistributedNotificationCenter.default().addObserver(forName: .init(name), object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshNow() }  // queue: .main, so this is the main thread
+            }
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             Task { @MainActor in self.poll() }
         }
@@ -219,6 +226,13 @@ final class NowPlaying: ObservableObject {
                 _ = Self.run("tell application \"\(t.app)\"\nset active tab index of \(w) to \(t.tab!.index)\nset index of \(w) to 1\nactivate\nend tell")
             }
         }
+    }
+
+    /// Poll right away, discarding any poll already in flight (it may carry the old state).
+    private func refreshNow() {
+        generation += 1
+        busy = false
+        poll()
     }
 
     enum Command { case playPause, next, previous }
