@@ -21,5 +21,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>NSAppleEventsUsageDescription</key><string>อ่านเพลงหรือคลิปที่กำลังเล่นจาก Spotify, Music และ YouTube ในเบราว์เซอร์</string>
 </dict></plist>
 EOF
-codesign --force --sign - "$APP"
+# Stable self-signed identity so macOS remembers permissions across rebuilds; falls back to ad-hoc.
+ID=$(security find-identity -p codesigning 2>/dev/null | awk "/DynamicIsland Local/ {print \$2; exit}")
+codesign --force --sign "${ID:--}" "$APP"
 echo "Built $APP — run: open $APP"
