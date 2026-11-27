@@ -14,7 +14,7 @@
 
 ## ติดตั้ง (สำหรับคนทั่วไป)
 
-1. โหลด `Lagoon-x.y.z.zip` ล่าสุดจาก [Releases](https://github.com/Gameinwza/mac-dynamic-island/releases/latest) แล้วแตกไฟล์
+1. โหลด `Lagoon-x.y.z.zip` ล่าสุดจาก [Releases](https://github.com/Gameinwza/lagoon/releases/latest) แล้วแตกไฟล์
 2. ลาก `Lagoon.app` ไปไว้ใน **Applications**
 3. แอปยังไม่ได้ notarize กับ Apple เปิดครั้งแรก macOS จะเตือนว่าตรวจสอบนักพัฒนาไม่ได้ ให้ไปที่
    **System Settings → Privacy & Security** แล้วกด **Open Anyway** (ทำครั้งเดียว)

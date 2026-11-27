@@ -1,4 +1,4 @@
-# Lagoon (mac-dynamic-island) — Agent Instructions
+# Lagoon — Agent Instructions (repo: Gameinwza/lagoon)
 
 Lagoon: a native Dynamic-Island-style app for the Mac notch (Windows later, on the `windows` branch).
 **Invisible. Intuitive. Instant. — Minimal by default, powerful by choice. — One island, every screen, zero setup.**

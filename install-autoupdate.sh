@@ -6,7 +6,7 @@ set -e
 DIR="$HOME/Library/Application Support/DynamicIsland/repo"
 if [ ! -d "$DIR/.git" ]; then
   mkdir -p "$(dirname "$DIR")"
-  git clone -q https://github.com/Gameinwza/mac-dynamic-island.git "$DIR"
+  git clone -q https://github.com/Gameinwza/lagoon.git "$DIR"
 fi
 LABEL=local.dynamicisland.updater
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
