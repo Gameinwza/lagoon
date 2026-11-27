@@ -10,7 +10,9 @@ struct IslandView: View {
     private var size: CGSize {
         if expanded { return CGSize(width: 380, height: 150) }
         if banner != nil { return CGSize(width: 340, height: 36) }
-        return np.track == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
+        let icons = CGFloat(bt.devices.count) * 20
+        return np.track == nil ? CGSize(width: 200 + (icons > 0 ? icons + 20 : 0), height: 32)
+                               : CGSize(width: 280 + icons, height: 32)
     }
     private var accent: Color {
         if np.track?.isVideo == true { return .red }
@@ -25,6 +27,8 @@ struct IslandView: View {
                     .fill(.black)
                 if let e = banner {
                     btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else if np.track == nil, !bt.devices.isEmpty {
+                    HStack { Spacer(); deviceIcons }.padding(.horizontal, 14).frame(height: 32)
                 } else if let t = np.track {
                     if expanded {
                         full(t).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
@@ -39,7 +43,18 @@ struct IslandView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: np.track?.title)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.event)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.devices)
         .onChange(of: size, initial: true) { _, s in state.size = s }
+    }
+
+    /// Small icons for every connected Bluetooth device (hover shows the name).
+    private var deviceIcons: some View {
+        HStack(spacing: 6) {
+            ForEach(bt.devices, id: \.self) { d in
+                Image(systemName: d.icon).font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85)).help(d.name).accessibilityLabel(d.name)
+            }
+        }
     }
 
     private func btBanner(_ e: BTEvent) -> some View {
@@ -70,7 +85,7 @@ struct IslandView: View {
     }
 
     private func compact(_ t: Track) -> some View {
-        HStack { art(20); Spacer(); Bars(playing: t.playing, color: accent) }
+        HStack(spacing: 10) { art(20); Spacer(); deviceIcons; Bars(playing: t.playing, color: accent) }
             .padding(.horizontal, 12).frame(height: 32)
     }
 
