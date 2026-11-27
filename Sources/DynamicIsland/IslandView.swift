@@ -152,7 +152,7 @@ struct IslandView: View {
                 let pos = t.position(at: tl.date)
                 HStack(spacing: 8) {
                     Text(fmt(pos)).font(.caption2.monospacedDigit())
-                    ProgressView(value: pos, total: max(t.duration, 1)).tint(.white)
+                    Scrubber(position: pos, duration: t.duration) { np.send(.seek($0)) }
                     Text(fmt(t.duration)).font(.caption2.monospacedDigit())
                 }.foregroundStyle(.gray)
             } }
@@ -171,6 +171,7 @@ struct IslandView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(showBT ? "ซ่อนข้อมูล Bluetooth" : "ดูข้อมูล Bluetooth")
+                    .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
                     .offset(x: 12)  // a bit more breathing room from the Next button
                 }
             }
@@ -251,7 +252,49 @@ struct PressStyle: ButtonStyle {
             .opacity(configuration.isPressed ? 0.7 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
             .animation(.easeOut(duration: 0.15), value: hover)
-            .onHover { hover = $0 }
+            .onHover { hover = $0; $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
             .contentShape(Rectangle())
+    }
+}
+
+/// Seek bar: thickens and shows a knob on hover; click or drag to jump.
+struct Scrubber: View {
+    var position: Double
+    var duration: Double
+    var onSeek: (Double) -> Void
+    @State private var hover = false
+    @State private var drag: Double?   // 0…1 while dragging
+
+    var body: some View {
+        GeometryReader { g in
+            let f = drag ?? (duration > 0 ? min(1, position / duration) : 0)
+            let active = hover || drag != nil
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.2))
+                Capsule().fill(.white).frame(width: max(0, g.size.width * f))
+                Circle().fill(.white).frame(width: 12, height: 12)
+                    .offset(x: g.size.width * f - 6)
+                    .opacity(active ? 1 : 0)
+                    .shadow(radius: 2)
+            }
+            .frame(height: active ? 7 : 4)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { drag = min(1, max(0, $0.location.x / g.size.width)) }
+                .onEnded { _ in
+                    if let d = drag { onSeek(d * duration) }
+                    drag = nil
+                })
+            .onHover { hover = $0; $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
+            .animation(.easeOut(duration: 0.15), value: active)
+        }
+        .frame(height: 16)
+        .accessibilityElement()
+        .accessibilityLabel("ตำแหน่งเพลง")
+        .accessibilityValue("\(Int(position) / 60):\(String(format: "%02d", Int(position) % 60))")
+        .accessibilityAdjustableAction { dir in
+            onSeek(min(duration, max(0, position + (dir == .increment ? 10 : -10))))
+        }
     }
 }

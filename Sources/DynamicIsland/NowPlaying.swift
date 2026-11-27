@@ -242,7 +242,7 @@ final class NowPlaying: ObservableObject {
         poll()
     }
 
-    enum Command { case playPause, next, previous }
+    enum Command: Equatable { case playPause, next, previous, seek(Double) }
 
     func send(_ c: Command) {
         guard var t = track else { return }
@@ -254,16 +254,28 @@ final class NowPlaying: ObservableObject {
             t.playing.toggle()
             track = t
         }
+        if case .seek(let to) = c {
+            // Jump the bar now; the next poll confirms it.
+            t.position = to
+            t.fetchedAt = Date()
+            track = t
+        }
         queue.async {
             if t.isVideo {
                 let js = switch c {
                 case .playPause: "(()=>{const v=document.querySelector('video');v.paused?v.play():v.pause()})()"
                 case .next: "document.querySelector('.ytp-next-button').click()"
                 case .previous: "document.querySelector('video').currentTime=0"
+                case .seek(let to): "document.querySelector('video').currentTime=\(to)"
                 }
                 _ = Self.run("tell application \"\(t.app)\" to \(Self.jsCall(t.app, js, tab: Self.tabRef(t)))")
             } else {
-                let cmd = switch c { case .playPause: "playpause"; case .next: "next track"; case .previous: "previous track" }
+                let cmd = switch c {
+                case .playPause: "playpause"
+                case .next: "next track"
+                case .previous: "previous track"
+                case .seek(let to): "set player position to \(to)"
+                }
                 _ = Self.run("tell application \"\(t.app)\" to \(cmd)")
             }
             // The player needs a moment to apply the command before it reports the new state.
