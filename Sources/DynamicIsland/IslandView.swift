@@ -100,7 +100,7 @@ struct IslandView: View {
             Text(e.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
             Spacer()
             Text(e.connected ? "เชื่อมต่อแล้ว" : "ตัดการเชื่อมต่อ").font(.system(size: 12, weight: .medium))
-                .foregroundStyle(e.connected ? .green : .gray)
+                .foregroundStyle(e.connected ? Color.green : Color.orange)  // gray was unreadable on black
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 14).frame(height: 36)
