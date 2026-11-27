@@ -9,7 +9,15 @@ enum Pref {
     static let defaults: [String: Any] = [
         waveColor: "blue", youtube: true, btBanner: true, deviceIcons: true, hideAfter: 3.0, launchAtLogin: true,
     ]
-    static func register() { UserDefaults.standard.register(defaults: defaults) }
+    static func register() {
+        UserDefaults.standard.register(defaults: defaults)
+        // Carry settings over from before the rename (bundle id was local.dynamicisland).
+        let d = UserDefaults.standard
+        if d.object(forKey: "migrated") == nil, let old = UserDefaults(suiteName: "local.dynamicisland") {
+            for k in defaults.keys { if let v = old.object(forKey: k) { d.set(v, forKey: k) } }
+            d.set(true, forKey: "migrated")
+        }
+    }
     static func reset() { defaults.keys.forEach(UserDefaults.standard.removeObject(forKey:)) }
 
     static func bool(_ key: String) -> Bool { UserDefaults.standard.bool(forKey: key) }
@@ -63,7 +71,7 @@ struct SettingsView: View {
             HStack {
                 Button("คืนค่าเริ่มต้น") { withAnimation { Pref.reset() }; Pref.applyLaunchAtLogin() }
                 Spacer()
-                Button("ปิด Dynamic Island", role: .destructive) { NSApp.terminate(nil) }
+                Button("ปิด Lagoon", role: .destructive) { NSApp.terminate(nil) }
             }
             .controlSize(.large)
             .padding(.horizontal, 20).padding(.bottom, 18)
@@ -87,7 +95,7 @@ struct SettingsView: View {
             .background(.black, in: Capsule())
             .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
             .animation(.easeInOut(duration: 0.25), value: waveColor)
-            Text("Dynamic Island").font(.title3.weight(.semibold))
+            Text("Lagoon").font(.title3.weight(.semibold))
             Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -128,7 +136,7 @@ enum SettingsWindow {
     static func show() {
         if window == nil {
             let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
-            w.title = "ตั้งค่า"
+            w.title = "ตั้งค่า Lagoon"
             w.styleMask = [.titled, .closable, .fullSizeContentView]
             w.titlebarAppearsTransparent = true
             w.titleVisibility = .hidden

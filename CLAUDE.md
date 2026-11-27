@@ -1,6 +1,6 @@
-# mac-dynamic-island — Agent Instructions
+# Lagoon (mac-dynamic-island) — Agent Instructions
 
-Native Dynamic Island for the Mac notch (Windows later, on the `windows` branch).
+Lagoon: a native Dynamic-Island-style app for the Mac notch (Windows later, on the `windows` branch).
 **Invisible. Intuitive. Instant. — Minimal by default, powerful by choice. — One island, every screen, zero setup.**
 
 ## Non-negotiable rules (in priority order)
@@ -44,7 +44,7 @@ pause animation loops when nothing is visible, debounce bursty events, cap cache
 - `Bluetooth.swift` — connected devices (CoreAudio for headphones, IOBluetooth for others), AirPods battery
   (`system_profiler`) and in-ear state (`log stream` of bluetoothd — private format, may break).
 - `Space.swift` — private SkyLight calls to keep the island visible while switching Spaces.
-- `build.sh` builds and signs with the local "DynamicIsland Local" identity when present (stable permissions).
+- `build.sh` builds `Lagoon.app` (icon from `Assets/make-icon.swift` → `Assets/AppIcon.icns`) and signs with the local "DynamicIsland Local" identity when present (stable permissions).
 - `update.sh` / `install-autoupdate.sh` — launchd agent that rebuilds when `main` changes.
 
 When adding a feature: keep platform calls behind a small type like the ones above, don't build abstractions

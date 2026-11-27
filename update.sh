@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pulls main and, if it changed, rebuilds and reinstalls /Applications/DynamicIsland.app.
+# Pulls main and, if it changed, rebuilds and reinstalls /Applications/Lagoon.app.
 # Run by the launchd agent from install-autoupdate.sh; safe to run by hand too.
 set -e
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin
@@ -17,9 +17,10 @@ git merge -q --ff-only origin/main
 echo "updated $LOCAL -> $REMOTE"
 
 ./build.sh
-pkill -x DynamicIsland || true
+pkill -x Lagoon || true
+pkill -x DynamicIsland || true  # app was called DynamicIsland before 1.1
 sleep 1
-rm -rf /Applications/DynamicIsland.app
-cp -R DynamicIsland.app /Applications/
-open /Applications/DynamicIsland.app
+rm -rf /Applications/Lagoon.app /Applications/DynamicIsland.app
+cp -R Lagoon.app /Applications/
+open /Applications/Lagoon.app
 echo "installed and relaunched"

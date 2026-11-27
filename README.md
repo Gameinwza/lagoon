@@ -1,4 +1,6 @@
-# Mac Dynamic Island
+<p align="center"><img src="Assets/AppIcon-1024.png" width="160" alt="Lagoon icon"></p>
+
+# Lagoon
 
 แอปเล็กๆ ที่แสดง "Dynamic Island" ตรงรอยบากจอ Mac แสดงเพลงหรือคลิปที่กำลังเล่นจาก **Spotify**, **Apple Music** หรือ **YouTube** ใน Chrome / Brave / Safari
 
@@ -12,11 +14,11 @@
 
 ## ติดตั้ง (สำหรับคนทั่วไป)
 
-1. โหลด `DynamicIsland-x.y.z.zip` ล่าสุดจาก [Releases](https://github.com/Gameinwza/mac-dynamic-island/releases/latest) แล้วแตกไฟล์
-2. ลาก `DynamicIsland.app` ไปไว้ใน **Applications**
+1. โหลด `Lagoon-x.y.z.zip` ล่าสุดจาก [Releases](https://github.com/Gameinwza/mac-dynamic-island/releases/latest) แล้วแตกไฟล์
+2. ลาก `Lagoon.app` ไปไว้ใน **Applications**
 3. แอปยังไม่ได้ notarize กับ Apple เปิดครั้งแรก macOS จะเตือนว่าตรวจสอบนักพัฒนาไม่ได้ ให้ไปที่
    **System Settings → Privacy & Security** แล้วกด **Open Anyway** (ทำครั้งเดียว)
-   หรือรันใน Terminal: `xattr -dr com.apple.quarantine /Applications/DynamicIsland.app`
+   หรือรันใน Terminal: `xattr -dr com.apple.quarantine /Applications/Lagoon.app`
 4. กดอนุญาตเมื่อแอปขอควบคุม Spotify / Music / เบราว์เซอร์
 
 ต้องใช้ macOS 14 ขึ้นไป รองรับทั้ง Apple silicon และ Intel
@@ -27,14 +29,14 @@
 
 ```sh
 ./build.sh
-cp -R DynamicIsland.app /Applications/
-open /Applications/DynamicIsland.app
+cp -R Lagoon.app /Applications/
+open /Applications/Lagoon.app
 ```
 
 ครั้งแรกที่เปิดเพลง macOS จะถามสิทธิ์ให้ควบคุม Spotify/Music ให้กด OK
 (ตั้งค่าภายหลังได้ที่ System Settings → Privacy & Security → Automation)
 
-ปิดแอป: `pkill DynamicIsland`
+ปิดแอป: `pkill Lagoon`
 
 ## YouTube
 
@@ -58,7 +60,7 @@ open /Applications/DynamicIsland.app
 
 ## ตั้งค่า
 
-คลิกขวาที่เกาะ แล้วเลือก **ตั้งค่า…** หรือเปิดแอป DynamicIsland ซ้ำอีกครั้ง
+คลิกขวาที่เกาะ แล้วเลือก **ตั้งค่า…** หรือเปิดแอป Lagoon ซ้ำอีกครั้ง
 
 ตั้งได้: สีคลื่นเสียง, เวลาซ่อนหลังหยุดเพลง, เปิด/ปิด YouTube, แจ้งเตือน Bluetooth หลุด, ไอคอนอุปกรณ์ และเปิดเองตอนเข้าเครื่อง
 ปุ่ม **คืนค่าเริ่มต้น** จะตั้งทุกอย่างกลับเป็นค่าเดิม

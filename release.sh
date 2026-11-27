@@ -5,8 +5,8 @@ set -e
 cd "$(dirname "$0")"
 V=${1:?usage: ./release.sh <version>}
 VERSION=$V ARCHS="--arch arm64 --arch x86_64" ./build.sh
-ZIP=DynamicIsland-$V.zip
+ZIP=Lagoon-$V.zip
 rm -f "$ZIP"
-ditto -c -k --keepParent DynamicIsland.app "$ZIP"   # ditto keeps the code signature intact
-gh release create "v$V" "$ZIP" --target main --title "DynamicIsland $V" --generate-notes
+ditto -c -k --keepParent Lagoon.app "$ZIP"   # ditto keeps the code signature intact
+gh release create "v$V" "$ZIP" --target main --title "Lagoon $V" --generate-notes
 rm -f "$ZIP"

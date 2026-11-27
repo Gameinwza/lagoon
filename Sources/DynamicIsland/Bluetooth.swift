@@ -3,7 +3,7 @@ import IOBluetooth
 import CoreAudio
 import os
 
-private let log = Logger(subsystem: "local.dynamicisland", category: "bt")
+private let log = Logger(subsystem: "com.gameinwza.lagoon", category: "bt")
 
 struct BTEvent: Equatable {
     var name: String
