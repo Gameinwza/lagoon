@@ -72,15 +72,19 @@ final class NowPlaying: ObservableObject {
     private func tick() {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         let browserFront = Pref.bool(Pref.youtube) && Self.bundles.dropFirst(2).contains { $0.1 == front }
-        // Playing video 0.3 s; paused video 2 s; browser in front (user may be opening one) 1 s; else 8 s.
-        let browserGap: Double = track?.isVideo == true ? (track?.playing == true ? 0.3 : 2) : (browserFront ? 1 : 8)
+        // Playing video 1 s (one cheap call to its tab; the bar extrapolates in between); paused video 2 s;
+        // browser in front (user may be opening one) 1 s; state unknown (JS blocked) or nothing 8 s.
+        let browserGap: Double = track?.stateUnknown == true ? 8
+            : track?.isVideo == true ? (track?.playing == true ? 1 : 2) : (browserFront ? 1 : 8)
         let now = Date()
         let players = now.timeIntervalSince(lastPlayers) >= 10
         let browsers = now.timeIntervalSince(lastBrowsers) >= browserGap
         if players || browsers {
             if players { lastPlayers = now }
             lastBrowsers = now
-            if browserFront && !players && track?.isVideo != true, let app = Self.bundles.first(where: { $0.1 == front })?.0 {
+            if !players, let t = track, t.isVideo, t.playing, !t.stateUnknown {
+                pollVideoTab(t)
+            } else if browserFront && !players && track?.isVideo != true, let app = Self.bundles.first(where: { $0.1 == front })?.0 {
                 // Cheap: only ask the front tab's URL; scan all tabs once it's a YouTube video.
                 queue.async {
                     let tab = app == "Safari" ? "current tab" : "active tab"
@@ -104,6 +108,29 @@ final class NowPlaying: ObservableObject {
         ("Spotify", "com.spotify.client"), ("Music", "com.apple.Music"),
         ("Google Chrome", "com.google.Chrome"), ("Brave Browser", "com.brave.Browser"), ("Safari", "com.apple.Safari"),
     ]
+
+    /// While a video plays, ask only its tab (one Apple Event) for play state and position.
+    /// Anything unexpected (tab closed, moved, another video) falls back to the full scan.
+    private func pollVideoTab(_ t: Track) {
+        guard !busy else { return }
+        busy = true
+        let gen = generation
+        let js = "(()=>{const v=document.querySelector('video');if(!v)return '';" +
+            "return [v.paused?0:1,v.currentTime,v.duration||0,new URLSearchParams(location.search).get('v')].join('|')})()"
+        let src = "tell application \"\(t.app)\" to \(Self.jsCall(t.app, js, tab: Self.tabRef(t)))"
+        queue.async {
+            let p = (Self.run(src)?.stringValue ?? "").components(separatedBy: "|")
+            DispatchQueue.main.async {
+                self.busy = false
+                guard gen == self.generation else { return }
+                guard p.count == 4, let vid = t.artURL?.absoluteString, vid.contains("/vi/\(p[3])/") else { self.poll(players: false); return }
+                var u = t
+                u.playing = p[0] == "1"; u.position = Self.num(p[1]); u.duration = Self.num(p[2]); u.fetchedAt = Date()
+                let found = self.hideIfPausedTooLong(u)
+                if !Self.same(found, self.track) { self.track = found }
+            }
+        }
+    }
 
     /// Last Spotify/Music result, reused by polls that only check browsers. Only touched on `queue`.
     nonisolated(unsafe) private static var playerCache: [Track] = []

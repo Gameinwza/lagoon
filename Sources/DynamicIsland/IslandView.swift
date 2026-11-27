@@ -26,6 +26,10 @@ struct IslandView: View {
         let compact = Notch.present ? max(280, Notch.width + 100) : 260
         return shown == nil ? CGSize(width: 200, height: 32) : CGSize(width: compact, height: 32)
     }
+    // Notch: square top that merges with the camera housing. No notch: a floating, fully rounded pill.
+    private var islandRadius: CGFloat { expanded ? 32 : banner != nil ? 22 : Notch.present ? 14 : 16 }
+    private var islandTop: CGFloat { Notch.present ? 0 : islandRadius }
+
     private var accent: Color {
         if np.track?.isVideo == true { return .red }
         return np.track?.app == "Spotify" ? .green : .pink
@@ -39,10 +43,8 @@ struct IslandView: View {
     private var island: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                // Notch: square top that merges with the camera housing. No notch: a floating, fully rounded pill.
-                let r: CGFloat = expanded ? 32 : banner != nil ? 22 : Notch.present ? 14 : 16
-                let top: CGFloat = Notch.present ? 0 : r
-                UnevenRoundedRectangle(topLeadingRadius: top, bottomLeadingRadius: r, bottomTrailingRadius: r, topTrailingRadius: top)
+                UnevenRoundedRectangle(topLeadingRadius: islandTop, bottomLeadingRadius: islandRadius,
+                                       bottomTrailingRadius: islandRadius, topTrailingRadius: islandTop)
                     .fill(.black)
                 if let e = banner {
                     btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -55,6 +57,9 @@ struct IslandView: View {
                 }
             }
             .frame(width: size.width, height: size.height)
+            // Content never shows outside the island, so icons vanish with it instead of trailing behind.
+            .clipShape(UnevenRoundedRectangle(topLeadingRadius: islandTop, bottomLeadingRadius: islandRadius,
+                                              bottomTrailingRadius: islandRadius, topTrailingRadius: islandTop))
             .shadow(color: .black.opacity(Notch.present ? 0 : 0.3), radius: 10, y: 4)
             .padding(.top, Notch.present ? 0 : Notch.floatGap)
             // Music closed (or paused > 5 min): shrink slightly and fade out, keeping the last song on
@@ -252,33 +257,63 @@ struct IslandView: View {
     private func fmt(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
 }
 
-struct Bars: View {
+/// Sound wave. Animated by Core Animation in the render server, so a playing song costs the app ~no CPU
+/// (a SwiftUI TimelineView here re-laid out the whole island 60 times a second).
+struct Bars: NSViewRepresentable {
     var playing: Bool
     var color: Color
-    @State private var changedAt = Date.distantPast
-    @State private var settled = true   // true once the pause fade is over → stop redrawing
 
-    /// 0…1 wave height: eases in over 0.3 s on play and fades out over 0.6 s on pause.
-    private func amp(_ t: Date) -> Double {
-        let dt = t.timeIntervalSince(changedAt)
-        return playing ? min(1, dt / 0.3) : max(0, 1 - dt / 0.6)
-    }
+    func makeNSView(context: Context) -> BarsView { BarsView() }
+    func updateNSView(_ v: BarsView, context: Context) { v.update(playing: playing, color: NSColor(color)) }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: BarsView, context: Context) -> CGSize? { BarsView.size }
+}
 
-    var body: some View {
-        TimelineView(.animation(paused: !playing && settled)) { tl in
-            let t = tl.date.timeIntervalSinceReferenceDate, a = amp(tl.date)
-            HStack(spacing: 2) {
-                ForEach(0..<4) { i in
-                    Capsule().fill(color)
-                        .frame(width: 3, height: 4 + 10 * a * abs(sin(t * 4 + Double(i))))
-                }
-            }.frame(height: 16)
+final class BarsView: NSView {
+    static let size = CGSize(width: 18, height: 16)
+    private var bars: [CALayer] = []
+    private var playing: Bool?
+
+    override init(frame: NSRect) {
+        super.init(frame: NSRect(origin: .zero, size: Self.size))
+        wantsLayer = true
+        for i in 0..<4 {
+            let l = CALayer()
+            l.frame = CGRect(x: CGFloat(i) * 5, y: 0, width: 3, height: Self.size.height)
+            l.cornerRadius = 1.5
+            l.transform = CATransform3DMakeScale(1, 0.25, 1)
+            layer?.addSublayer(l)
+            bars.append(l)
         }
-        .onChange(of: playing) {
-            changedAt = Date()
-            settled = false
-            if !playing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { if !playing { settled = true } }
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var intrinsicContentSize: NSSize { Self.size }
+
+    func update(playing: Bool, color: NSColor) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        bars.forEach { $0.backgroundColor = color.cgColor }
+        CATransaction.commit()
+        guard playing != self.playing else { return }
+        self.playing = playing
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        for (i, l) in bars.enumerated() {
+            if playing && !reduceMotion {
+                let a = CABasicAnimation(keyPath: "transform.scale.y")
+                a.fromValue = 0.25; a.toValue = 1
+                a.duration = [0.42, 0.33, 0.5, 0.38][i]
+                a.autoreverses = true; a.repeatCount = .infinity
+                a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                a.beginTime = CACurrentMediaTime() + Double(i) * 0.07
+                l.add(a, forKey: "wave")
+                l.transform = CATransform3DMakeScale(1, playing ? 0.6 : 0.25, 1)
+            } else {
+                // Settle smoothly to flat instead of freezing mid-wave.
+                let from = l.presentation()?.value(forKeyPath: "transform.scale.y") ?? 0.6
+                l.removeAnimation(forKey: "wave")
+                let a = CABasicAnimation(keyPath: "transform.scale.y")
+                a.fromValue = from; a.toValue = playing ? 0.6 : 0.25; a.duration = 0.5
+                a.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                l.add(a, forKey: "settle")
+                l.transform = CATransform3DMakeScale(1, playing ? 0.6 : 0.25, 1)
             }
         }
     }
