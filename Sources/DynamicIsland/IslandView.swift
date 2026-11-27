@@ -142,9 +142,8 @@ struct IslandView: View {
                         }
                     }.contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiftStyle())
                 .accessibilityLabel("เปิด \(t.title) ใน \(t.app)")
-                .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
                 Spacer()
                 Bars(playing: t.playing, color: accent)
             }
@@ -294,5 +293,18 @@ struct Scrubber: View {
         .accessibilityAdjustableAction { dir in
             onSeek(min(duration, max(0, position + (dir == .increment ? 10 : -10))))
         }
+    }
+}
+
+/// Grows a little under the pointer (and dips when pressed) so it reads as clickable.
+struct LiftStyle: ButtonStyle {
+    @State private var hover = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : hover ? 1.06 : 1, anchor: .leading)
+            .brightness(hover ? 0.08 : 0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hover)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
+            .onHover { hover = $0; $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
     }
 }
