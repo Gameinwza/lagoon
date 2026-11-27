@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel = IslandPanel(view: NSHostingView(rootView: IslandView(np: np, state: state)))
         panel.place()
         panel.orderFrontRegardless()
+        TopSpace.add(panel)
         np.start()
         // Start automatically at login (shows under System Settings → General → Login Items).
         if SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
