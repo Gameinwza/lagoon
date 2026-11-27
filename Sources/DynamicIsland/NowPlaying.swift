@@ -36,6 +36,10 @@ final class NowPlaying: ObservableObject {
     // AppleScript is synchronous (tens of ms per call); keep it off the main thread so animations don't stutter.
     private let queue = DispatchQueue(label: "nowplaying.applescript")
     private var busy = false
+    // Paused for more than this long → report nothing, so the island hides.
+    private static let pausedHideAfter: TimeInterval = 5 * 60
+    private var pausedKey: String?
+    private var pausedAt = Date()
     private var generation = 0  // bumped on every command so polls started earlier can't undo it
 
     func start() {
@@ -82,6 +86,7 @@ final class NowPlaying: ObservableObject {
             DispatchQueue.main.async {
                 self.busy = false
                 guard gen == self.generation else { return }  // stale: a command ran meanwhile
+                let found = self.hideIfPausedTooLong(found)
                 if !Self.same(found, self.track) { self.track = found }
                 self.loadArtIfNeeded()
             }
@@ -233,6 +238,13 @@ final class NowPlaying: ObservableObject {
                 _ = Self.run("tell application \"\(t.app)\"\nset active tab index of \(w) to \(t.tab!.index)\nset index of \(w) to 1\nactivate\nend tell")
             }
         }
+    }
+
+    private func hideIfPausedTooLong(_ t: Track?) -> Track? {
+        guard let t, !t.playing else { pausedKey = nil; return t }
+        let key = t.app + t.title
+        if pausedKey != key { pausedKey = key; pausedAt = Date() }
+        return Date().timeIntervalSince(pausedAt) > Self.pausedHideAfter ? nil : t
     }
 
     /// Poll right away, discarding any poll already in flight (it may carry the old state).

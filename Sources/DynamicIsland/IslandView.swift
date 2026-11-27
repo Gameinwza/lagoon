@@ -28,6 +28,9 @@ struct IslandView: View {
                 UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 32 : banner != nil ? 22 : 14,
                                        bottomTrailingRadius: expanded ? 32 : banner != nil ? 22 : 14)
                     .fill(.black)
+                    // Nothing playing (or paused > 5 min) and no banner: fade the island away entirely.
+                    .opacity(np.track == nil && banner == nil ? 0 : 1)
+                    .animation(.easeInOut(duration: 0.5), value: np.track == nil && banner == nil)
                 if let e = banner {
                     btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
                 } else if let t = np.track {

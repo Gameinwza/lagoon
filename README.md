@@ -6,6 +6,7 @@
 - เอาเมาส์ไปชี้: ขยายเป็นการ์ด มีปกเพลง ชื่อเพลง ศิลปิน แถบเวลา และปุ่ม ก่อนหน้า / เล่น-หยุด / ถัดไป
 - กดที่ปกหรือชื่อเพลง: เปิดหน้าเพลงนั้นใน Spotify / Music
 - ถอด Bluetooth (AirPods, หูฟัง, เมาส์, คีย์บอร์ด): แสดงแจ้งเตือน 3 วินาที
+- หยุดเพลงนานเกิน 5 นาที: island ซ่อนตัว กดเล่นต่อแล้วจะกลับมาเอง
 - ไอคอนเล็กๆ บอกว่ามีอุปกรณ์ Bluetooth อะไรต่ออยู่ พร้อม % แบต (ชี้ค้างเพื่อดูแบตหูซ้าย/ขวา/กล่อง)
 - เปิดเองอัตโนมัติตอนล็อกอิน (ปิดได้ที่ System Settings → General → Login Items)
 
@@ -28,6 +29,14 @@ open /Applications/DynamicIsland.app
 
 - **Chrome / Brave:** เมนู View → Developer → Allow JavaScript from Apple Events
 - **Safari:** Settings → Advanced → เปิด "Show features for web developers" แล้วไปที่เมนู Develop → Allow JavaScript from Apple Events
+
+## อัปเดตอัตโนมัติ
+
+```sh
+./install-autoupdate.sh
+```
+
+เช็ก `main` ตอนล็อกอินและทุก 30 นาที ถ้ามีโค้ดใหม่จะ build และติดตั้งแอปใหม่ให้เอง (log อยู่ที่ `~/Library/Logs/DynamicIsland-update.log`)
 
 ## ข้อจำกัด
 
