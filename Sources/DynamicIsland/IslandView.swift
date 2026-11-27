@@ -4,11 +4,15 @@ struct IslandView: View {
     @ObservedObject var np: NowPlaying
     @ObservedObject var state: IslandState
     @ObservedObject var bt: BluetoothWatcher
+    @State private var showBT = false   // Bluetooth detail list inside the expanded card
 
     private var expanded: Bool { state.hover && np.track != nil }
     private var banner: BTEvent? { expanded ? nil : bt.event }
     private var size: CGSize {
-        if expanded { return CGSize(width: 380, height: 150) }
+        if expanded {
+            let rows = showBT ? CGFloat(max(bt.devices.count, 1)) * 26 + 14 : 0
+            return CGSize(width: 380, height: 150 + rows)
+        }
         if banner != nil { return CGSize(width: 340, height: 36) }
         let icons = bt.devices.reduce(CGFloat(0)) { $0 + ($1.battery?.headline != nil ? 48 : 20) }
         return np.track == nil ? CGSize(width: 200 + (icons > 0 ? icons + 20 : 0), height: 32)
@@ -45,6 +49,7 @@ struct IslandView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.event)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.devices)
         .onChange(of: size, initial: true) { _, s in state.size = s }
+        .onChange(of: expanded) { _, e in if !e { showBT = false } }
     }
 
     /// Small icons for every connected Bluetooth device (hover shows the name).
@@ -62,6 +67,23 @@ struct IslandView: View {
                 .help(d.battery.map { "\(d.name) — \($0.detail)" } ?? d.name)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(d.battery.map { "\(d.name) \($0.detail)" } ?? d.name)
+            }
+        }
+    }
+
+    /// Expanded-card list: every connected device with its full battery breakdown.
+    private var btList: some View {
+        VStack(spacing: 6) {
+            Divider().overlay(Color.white.opacity(0.15))
+            ForEach(bt.devices, id: \.self) { d in
+                HStack(spacing: 10) {
+                    Image(systemName: d.icon).frame(width: 20)
+                    Text(d.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    Spacer()
+                    Text(d.battery?.detail ?? "เชื่อมต่ออยู่").font(.system(size: 12).monospacedDigit())
+                        .foregroundStyle(.gray)
+                }
+                .frame(height: 20)
             }
         }
     }
@@ -114,7 +136,6 @@ struct IslandView: View {
                 .accessibilityLabel("เปิด \(t.title) ใน \(t.app)")
                 .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
                 Spacer()
-                deviceIcons
                 Bars(playing: t.playing, color: accent)
             }
             if t.duration > 0 { TimelineView(.animation(paused: !t.playing)) { tl in
@@ -130,6 +151,19 @@ struct IslandView: View {
                 btn(t.playing ? "pause.fill" : "play.fill", "เล่น/หยุด") { np.send(.playPause) }
                 btn("forward.fill", "ถัดไป") { np.send(.next) }
             }
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .trailing) {
+                if !bt.devices.isEmpty {
+                    Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showBT.toggle() } } label: {
+                        deviceIcons.padding(.horizontal, 8).frame(minHeight: 32)
+                            .background(showBT ? Color.white.opacity(0.15) : .clear, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showBT ? "ซ่อนข้อมูล Bluetooth" : "ดูข้อมูล Bluetooth")
+                }
+            }
+            if showBT { btList.transition(.opacity) }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 22).padding(.top, 36).padding(.bottom, 14)

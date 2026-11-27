@@ -14,7 +14,7 @@ final class IslandState: ObservableObject {
 /// It stays a fixed size (resizing a window mid-animation is what made it stutter) and
 /// becomes click-through outside the island so it never blocks the menu bar.
 final class IslandPanel: NSPanel {
-    static let maxSize = CGSize(width: 420, height: 180)
+    static let maxSize = CGSize(width: 420, height: 320)  // room for the Bluetooth list
 
     init(view: NSView) {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
