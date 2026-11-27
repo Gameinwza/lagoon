@@ -36,8 +36,9 @@ final class NowPlaying: ObservableObject {
     // AppleScript is synchronous (tens of ms per call); keep it off the main thread so animations don't stutter.
     private let queue = DispatchQueue(label: "nowplaying.applescript")
     private var busy = false
-    // Paused for more than this long → report nothing, so the island hides.
-    private static let pausedHideAfter: TimeInterval = 5 * 60
+    // Paused for more than this long → report nothing, so the island fades away (short, so a pause
+    // reads as "stopped", but long enough to see the pause register).
+    private static let pausedHideAfter: TimeInterval = 3
     private var pausedKey: String?
     private var pausedAt = Date()
     private var generation = 0  // bumped on every command so polls started earlier can't undo it
