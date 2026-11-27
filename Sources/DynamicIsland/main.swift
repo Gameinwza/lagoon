@@ -46,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: IslandPanel!
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        // The island is a panel, not a window, so macOS would otherwise see an idle app and quit it.
+        ProcessInfo.processInfo.disableAutomaticTermination("island is always on screen")
+        ProcessInfo.processInfo.disableSuddenTermination()
         Pref.register()
         panel = IslandPanel(view: NSHostingView(rootView: IslandView(np: np, state: state, bt: bt, audio: audio)))
         panel.place()

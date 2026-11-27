@@ -128,7 +128,7 @@ final class NowPlaying: ObservableObject {
             }
             if found?.playing != true {
                 for app in apps where !isPlayer(app) {
-                    if let t = Self.queryYouTube(app), t.playing || found == nil { found = t }
+                    if let t = Self.queryYouTube(app), t.playing || t.stateUnknown || found == nil { found = t }  // an open video beats a paused player
                     if found?.playing == true { break }
                 }
             }
