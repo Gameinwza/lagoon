@@ -181,8 +181,12 @@ struct IslandView: View {
     }
 
     private func btn(_ icon: String, _ label: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.title3).frame(width: 44, height: 32) }
-            .buttonStyle(.plain).accessibilityLabel(label)
+        Button(action: action) {
+            Image(systemName: icon).font(.title3)
+                .contentTransition(.symbolEffect(.replace))  // play ↔ pause morphs instead of popping
+                .frame(width: 44, height: 32)
+        }
+        .buttonStyle(PressStyle()).accessibilityLabel(label)
     }
 
     private func fmt(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
@@ -234,5 +238,20 @@ struct BatteryRing: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(label) \(level)%")
+    }
+}
+
+/// Shrinks and dims while pressed, with a hover highlight, all animated.
+struct PressStyle: ButtonStyle {
+    @State private var hover = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(Circle().fill(.white.opacity(hover ? 0.12 : 0)).frame(width: 40, height: 40))
+            .scaleEffect(configuration.isPressed ? 0.82 : 1)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.15), value: hover)
+            .onHover { hover = $0 }
+            .contentShape(Rectangle())
     }
 }
