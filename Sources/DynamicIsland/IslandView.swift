@@ -5,6 +5,7 @@ struct IslandView: View {
     @ObservedObject var state: IslandState
     @ObservedObject var bt: BluetoothWatcher
     @ObservedObject var audio: OutputAudio
+    @ObservedObject private var updater = Updater.shared
     @AppStorage(Pref.waveColor) private var waveColor = "blue"
     @AppStorage(Pref.deviceIcons) private var showDevices = true
     @State private var showBT = false   // Bluetooth detail list inside the expanded card
@@ -37,7 +38,13 @@ struct IslandView: View {
 
     var body: some View {
         let _ = state.screenChanges  // re-layout when displays change
-        return island.contextMenu { Button("ตั้งค่า…") { SettingsWindow.show() } }
+        return island.contextMenu {
+            if let v = updater.available {
+                Button("อัปเดตเป็น \(v)") { Updater.shared.install() }
+                Divider()
+            }
+            Button("ตั้งค่า…") { SettingsWindow.show() }
+        }
     }
 
     private var island: some View {
@@ -448,6 +455,7 @@ struct IconButton: View {
 /// Settings gear: turns a little on hover and brightens, opens Lagoon's settings.
 struct GearButton: View {
     @State private var hover = false
+    @ObservedObject private var updater = Updater.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -455,9 +463,14 @@ struct GearButton: View {
             Image(systemName: "gearshape.fill").font(.system(size: 14))
                 .foregroundStyle(hover ? .white : .gray)
                 .rotationEffect(.degrees(hover && !reduceMotion ? 60 : 0))
+                .overlay(alignment: .topTrailing) {  // dot = an update is waiting in settings
+                    if updater.available != nil { Circle().fill(.blue).frame(width: 7, height: 7).offset(x: 3, y: -2) }
+                }
                 .frame(width: 40, height: 32).contentShape(Capsule())
         }
-        .buttonStyle(PressStyle()).help("ตั้งค่า Lagoon").accessibilityLabel("ตั้งค่า Lagoon")
+        .buttonStyle(PressStyle())
+        .help(updater.available == nil ? "ตั้งค่า Lagoon" : "ตั้งค่า Lagoon · มีอัปเดต")
+        .accessibilityLabel(updater.available == nil ? "ตั้งค่า Lagoon" : "ตั้งค่า Lagoon, มีอัปเดต")
         .onHover { h in withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) { hover = h } }
     }
 }

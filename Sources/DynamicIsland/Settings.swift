@@ -4,10 +4,11 @@ import ServiceManagement
 /// User preferences. Every key has a default, so the app works with zero setup.
 enum Pref {
     static let waveColor = "waveColor", youtube = "youtube", btBanner = "btBanner",
-               deviceIcons = "deviceIcons", hideAfter = "hideAfter", launchAtLogin = "launchAtLogin"
+               deviceIcons = "deviceIcons", hideAfter = "hideAfter", launchAtLogin = "launchAtLogin",
+               autoUpdate = "autoUpdate"
 
     static let defaults: [String: Any] = [
-        waveColor: "blue", youtube: true, btBanner: true, deviceIcons: true, hideAfter: 3.0, launchAtLogin: true,
+        waveColor: "blue", youtube: true, btBanner: true, deviceIcons: true, hideAfter: 3.0, launchAtLogin: true, autoUpdate: true,
     ]
     static func register() {
         UserDefaults.standard.register(defaults: defaults)
@@ -42,6 +43,8 @@ struct SettingsView: View {
     @AppStorage(Pref.deviceIcons) private var deviceIcons = true
     @AppStorage(Pref.hideAfter) private var hideAfter = 3.0
     @AppStorage(Pref.launchAtLogin) private var launchAtLogin = true
+    @AppStorage(Pref.autoUpdate) private var autoUpdate = true
+    @ObservedObject private var updater = Updater.shared
 
     private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
 
@@ -64,12 +67,15 @@ struct SettingsView: View {
                 Section("ระบบ") {
                     Toggle(isOn: $launchAtLogin) { row("power", .green, "เปิดเองตอนเข้าเครื่อง") }
                         .onChange(of: launchAtLogin) { Pref.applyLaunchAtLogin() }
+                    Toggle(isOn: $autoUpdate) { row("arrow.triangle.2.circlepath", .teal, "ตรวจหาอัปเดตอัตโนมัติ") }
+                        .onChange(of: autoUpdate) { updater.applyAutoCheck() }
+                    LabeledContent { updateControl } label: { row("arrow.down.circle.fill", .blue, "อัปเดต") }
                 }
             }
             .formStyle(.grouped)
             .scrollDisabled(true)
             HStack {
-                Button("คืนค่าเริ่มต้น") { withAnimation { Pref.reset() }; Pref.applyLaunchAtLogin() }
+                Button("คืนค่าเริ่มต้น") { withAnimation { Pref.reset() }; Pref.applyLaunchAtLogin(); updater.applyAutoCheck() }
                 Spacer()
                 Button("ปิด Lagoon", role: .destructive) { NSApp.terminate(nil) }
             }
@@ -90,7 +96,11 @@ struct SettingsView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Lagoon").font(.headline)
-                    Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.secondary)
+                    if let v = updater.available {
+                        Text("เวอร์ชัน \(version) · มีเวอร์ชันใหม่ \(v)").font(.caption).foregroundStyle(.blue)
+                    } else {
+                        Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Picker("ตัวอย่าง", selection: $previewExpanded.animation(.spring(response: 0.42, dampingFraction: 0.78))) {
@@ -101,6 +111,30 @@ struct SettingsView: View {
             PreviewScreen(expanded: previewExpanded, wave: Pref.color(waveColor), showDevices: deviceIcons)
         }
         .padding(.horizontal, 20).padding(.top, 34)
+    }
+
+    /// One control that walks through check → available → installing, with error and up-to-date states.
+    @ViewBuilder private var updateControl: some View {
+        switch updater.phase {
+        case .idle:
+            Button("ตรวจหาเลย") { updater.check() }
+        case .checking:
+            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("กำลังตรวจ…").foregroundStyle(.secondary) }
+        case .upToDate:
+            HStack(spacing: 8) {
+                Text("ล่าสุดแล้ว").foregroundStyle(.secondary)
+                Button("ตรวจอีกครั้ง") { updater.check() }
+            }
+        case .available(let v, _):
+            Button("อัปเดตเป็น \(v)") { updater.install() }.buttonStyle(.borderedProminent)
+        case .installing:
+            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("กำลังติดตั้ง…").foregroundStyle(.secondary) }
+        case .failed(let msg):
+            HStack(spacing: 8) {
+                Text(msg).foregroundStyle(.red).lineLimit(2).multilineTextAlignment(.trailing).frame(maxWidth: 200, alignment: .trailing)
+                Button("ลองใหม่") { updater.check() }
+            }
+        }
     }
 
     private var swatches: some View {

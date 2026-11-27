@@ -3,6 +3,8 @@
 set -e
 cd "$(dirname "$0")"
 swift build -c release ${ARCHS:-}
+# Default to the latest release tag, so local builds don't look outdated to the in-app updater.
+VERSION=${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')}
 APP=Lagoon.app
 rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Assets/AppIcon.icns "$APP/Contents/Resources/"

@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.disableAutomaticTermination("island is always on screen")
         ProcessInfo.processInfo.disableSuddenTermination()
         Pref.register()
+        Updater.shared.applyAutoCheck()
         panel = IslandPanel(view: NSHostingView(rootView: IslandView(np: np, state: state, bt: bt, audio: audio)))
         panel.place()
         panel.orderFrontRegardless()
