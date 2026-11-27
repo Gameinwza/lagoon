@@ -14,7 +14,7 @@
 
 ## ติดตั้ง (สำหรับคนทั่วไป)
 
-เว็บ: **https://gameinwza.github.io/lagoon-web/**
+เว็บ: **https://lagoon.gameinwza.com/**
 
 1. โหลด `Lagoon-x.y.z.zip` ล่าสุดจาก [Releases](https://github.com/Gameinwza/lagoon/releases/latest) แล้วแตกไฟล์
 2. ลาก `Lagoon.app` ไปไว้ใน **Applications**
