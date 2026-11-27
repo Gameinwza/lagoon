@@ -38,7 +38,6 @@ final class NowPlaying: ObservableObject {
     private var busy = false
     // Paused for more than this long → report nothing, so the island fades away (short, so a pause
     // reads as "stopped", but long enough to see the pause register).
-    private static let pausedHideAfter: TimeInterval = 3
     private var pausedKey: String?
     private var pausedAt = Date()
     private var generation = 0  // bumped on every command so polls started earlier can't undo it
@@ -67,7 +66,7 @@ final class NowPlaying: ObservableObject {
     /// One-shot timer that sleeps until the next check is due, so idle means ~1 wakeup every few seconds.
     private func tick() {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        let browserFront = Self.bundles.dropFirst(2).contains { $0.1 == front }
+        let browserFront = Pref.bool(Pref.youtube) && Self.bundles.dropFirst(2).contains { $0.1 == front }
         // Playing video 0.3 s; paused video 2 s; browser in front (user may be opening one) 1 s; else 8 s.
         let browserGap: Double = track?.isVideo == true ? (track?.playing == true ? 0.3 : 2) : (browserFront ? 1 : 8)
         let now = Date()
@@ -108,7 +107,8 @@ final class NowPlaying: ObservableObject {
         guard !busy else { return }
         // Never send AppleScript to a closed app: `tell` would launch it.
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        let apps = Self.bundles.filter { running.contains($0.1) }.map(\.0)
+        let youtube = Pref.bool(Pref.youtube)
+        let apps = Self.bundles.enumerated().filter { running.contains($0.element.1) && (youtube || $0.offset < 2) }.map(\.element.0)
         busy = true
         let gen = generation
         queue.async {
@@ -296,7 +296,8 @@ final class NowPlaying: ObservableObject {
         guard let t, !t.playing else { pausedKey = nil; return t }
         let key = t.app + t.title
         if pausedKey != key { pausedKey = key; pausedAt = Date() }
-        return Date().timeIntervalSince(pausedAt) > Self.pausedHideAfter ? nil : t
+        let after = UserDefaults.standard.double(forKey: Pref.hideAfter)  // 0 = never hide
+        return after > 0 && Date().timeIntervalSince(pausedAt) > after ? nil : t
     }
 
     /// Poll right away, discarding any poll already in flight (it may carry the old state).

@@ -4,6 +4,8 @@ struct IslandView: View {
     @ObservedObject var np: NowPlaying
     @ObservedObject var state: IslandState
     @ObservedObject var bt: BluetoothWatcher
+    @AppStorage(Pref.waveColor) private var waveColor = "blue"
+    @AppStorage(Pref.deviceIcons) private var showDevices = true
     @State private var showBT = false   // Bluetooth detail list inside the expanded card
     @State private var lastTrack: Track?  // kept while the island fades out after the music stops
     private var shown: Track? { np.track ?? lastTrack }
@@ -26,6 +28,10 @@ struct IslandView: View {
     }
 
     var body: some View {
+        island.contextMenu { Button("ตั้งค่า…") { SettingsWindow.show() } }
+    }
+
+    private var island: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 32 : banner != nil ? 22 : 14,
@@ -139,7 +145,7 @@ struct IslandView: View {
     }
 
     private func compact(_ t: Track) -> some View {
-        HStack { art(20); Spacer(); Bars(playing: t.playing, color: .blue) }
+        HStack { art(20); Spacer(); Bars(playing: t.playing, color: Pref.color(waveColor)) }
             .padding(.horizontal, 12).frame(height: 32)
     }
 
@@ -158,7 +164,7 @@ struct IslandView: View {
                 .buttonStyle(LiftStyle())
                 .accessibilityLabel("เปิด \(t.title) ใน \(t.app)")
                 Spacer()
-                Bars(playing: t.playing, color: .blue)
+                Bars(playing: t.playing, color: Pref.color(waveColor))
             }
             if t.duration > 0 { TimelineView(.animation(paused: !t.playing)) { tl in
                 let pos = t.position(at: tl.date)
@@ -175,7 +181,7 @@ struct IslandView: View {
             }
             .frame(maxWidth: .infinity)
             .overlay(alignment: .trailing) {
-                if !bt.devices.isEmpty {
+                if showDevices && !bt.devices.isEmpty {
                     Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showBT.toggle() } } label: {
                         deviceIcons.padding(.horizontal, 8).frame(minHeight: 32)
                             .background(showBT ? Color.white.opacity(0.15) : .clear, in: Capsule())

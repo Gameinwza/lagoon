@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: IslandPanel!
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        Pref.register()
         panel = IslandPanel(view: NSHostingView(rootView: IslandView(np: np, state: state, bt: bt)))
         panel.place()
         panel.orderFrontRegardless()
@@ -53,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         np.start()
         bt.start()
         // Start automatically at login (shows under System Settings → General → Login Items).
-        if SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
+        Pref.applyLaunchAtLogin()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.panel.place() }
@@ -69,6 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return e
         }
         panel.acceptsMouseMovedEvents = true
+    }
+
+    /// Opening the app again (Finder, Spotlight, `open`) shows settings.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        SettingsWindow.show(); return false
     }
 
     private func trackMouse() {
