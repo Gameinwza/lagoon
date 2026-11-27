@@ -54,11 +54,14 @@ struct IslandView: View {
                 Spacer()
                 Bars(playing: t.playing, color: accent)
             }
-            HStack(spacing: 8) {
-                Text(fmt(t.position)).font(.caption2.monospacedDigit())
-                ProgressView(value: min(t.position, t.duration), total: max(t.duration, 1)).tint(.white)
-                Text(fmt(t.duration)).font(.caption2.monospacedDigit())
-            }.foregroundStyle(.gray)
+            TimelineView(.animation(paused: !t.playing)) { tl in
+                let pos = t.position(at: tl.date)
+                HStack(spacing: 8) {
+                    Text(fmt(pos)).font(.caption2.monospacedDigit())
+                    ProgressView(value: pos, total: max(t.duration, 1)).tint(.white)
+                    Text(fmt(t.duration)).font(.caption2.monospacedDigit())
+                }.foregroundStyle(.gray)
+            }
             HStack(spacing: 36) {
                 btn("backward.fill", "ก่อนหน้า") { np.send("previous track") }
                 btn(t.playing ? "pause.fill" : "play.fill", "เล่น/หยุด") { np.send("playpause") }
