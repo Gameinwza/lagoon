@@ -129,7 +129,7 @@ struct IslandView: View {
     }
 
     private func compact(_ t: Track) -> some View {
-        HStack { art(20); Spacer(); Bars(playing: t.playing, color: accent) }
+        HStack { art(20); Spacer(); Bars(playing: t.playing, color: .blue) }
             .padding(.horizontal, 12).frame(height: 32)
     }
 
@@ -148,7 +148,7 @@ struct IslandView: View {
                 .buttonStyle(LiftStyle())
                 .accessibilityLabel("เปิด \(t.title) ใน \(t.app)")
                 Spacer()
-                Bars(playing: t.playing, color: accent)
+                Bars(playing: t.playing, color: .blue)
             }
             if t.duration > 0 { TimelineView(.animation(paused: !t.playing)) { tl in
                 let pos = t.position(at: tl.date)
