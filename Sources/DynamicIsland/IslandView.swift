@@ -105,6 +105,7 @@ struct IslandView: View {
                 .accessibilityLabel("เปิด \(t.title) ใน \(t.app)")
                 .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
                 Spacer()
+                deviceIcons
                 Bars(playing: t.playing, color: accent)
             }
             if t.duration > 0 { TimelineView(.animation(paused: !t.playing)) { tl in
