@@ -137,7 +137,7 @@ enum SettingsWindow {
         if window == nil {
             let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
             w.title = "ตั้งค่า Lagoon"
-            w.styleMask = [.titled, .closable, .fullSizeContentView]
+            w.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             w.titlebarAppearsTransparent = true
             w.titleVisibility = .hidden
             w.isReleasedWhenClosed = false

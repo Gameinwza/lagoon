@@ -14,6 +14,8 @@ struct Track: Equatable {
     // YouTube only: which tab, and the thumbnail.
     var tab: (window: Int, index: Int)? = nil
     var artURL: URL? = nil
+    /// Browser blocks JavaScript from Apple Events, so play state is unknown.
+    var stateUnknown = false
 
     var isVideo: Bool { tab != nil }
 
@@ -25,7 +27,7 @@ struct Track: Equatable {
     static func == (a: Track, b: Track) -> Bool {
         a.app == b.app && a.title == b.title && a.artist == b.artist && a.playing == b.playing
             && a.position == b.position && a.duration == b.duration && a.fetchedAt == b.fetchedAt
-            && a.tab?.window == b.tab?.window && a.tab?.index == b.tab?.index && a.artURL == b.artURL
+            && a.tab?.window == b.tab?.window && a.tab?.index == b.tab?.index && a.artURL == b.artURL && a.stateUnknown == b.stateUnknown
     }
 }
 
@@ -237,8 +239,8 @@ final class NowPlaying: ObservableObject {
         var t = Track(app: app, title: title, artist: "YouTube", playing: false, position: 0, duration: 0,
                       tab: (win, idx), artURL: vid.flatMap { URL(string: "https://i.ytimg.com/vi/\($0)/hqdefault.jpg") })
         if p.count > 4, p[4] == "JSOFF" {
-            // The browser blocks JavaScript from Apple Events, so play state is unknown: stay visible with a fix-it hint.
-            t.playing = true
+            // Play state is unknown: stay visible with a fix-it hint, but don't animate as if playing.
+            t.stateUnknown = true
             t.artist = "เปิด View › Developer › Allow JavaScript…"
         } else if js.count == 4 {
             t.playing = js[0] == "1"
@@ -307,7 +309,7 @@ final class NowPlaying: ObservableObject {
     }
 
     private func hideIfPausedTooLong(_ t: Track?) -> Track? {
-        guard let t, !t.playing else { pausedKey = nil; return t }
+        guard let t, !t.playing, !t.stateUnknown else { pausedKey = nil; return t }
         let key = t.app + t.title
         if pausedKey != key { pausedKey = key; pausedAt = Date() }
         let after = UserDefaults.standard.double(forKey: Pref.hideAfter)  // 0 = never hide
