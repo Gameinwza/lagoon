@@ -35,37 +35,90 @@ struct SettingsView: View {
     @AppStorage(Pref.hideAfter) private var hideAfter = 3.0
     @AppStorage(Pref.launchAtLogin) private var launchAtLogin = true
 
+    private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
+
     var body: some View {
-        Form {
-            Section("หน้าตา") {
-                Picker("สีคลื่นเสียง", selection: $waveColor) {
-                    ForEach(Pref.colors, id: \.id) { c in
-                        Label { Text(c.name) } icon: { Image(systemName: "circle.fill").foregroundStyle(c.color) }.tag(c.id)
-                    }
+        VStack(spacing: 0) {
+            header
+            Form {
+                Section("หน้าตา") {
+                    LabeledContent { swatches } label: { row("waveform", .blue, "สีคลื่นเสียง") }
+                    Picker(selection: $hideAfter) {
+                        Text("3 วิ").tag(3.0); Text("10 วิ").tag(10.0); Text("1 นาที").tag(60.0)
+                        Text("5 นาที").tag(300.0); Text("ไม่ซ่อน").tag(0.0)  // 0 = never
+                    } label: { row("eye.slash.fill", .gray, "ซ่อนหลังหยุดเพลง") }
                 }
-                Picker("ซ่อนหลังหยุดเพลง", selection: $hideAfter) {
-                    Text("3 วินาที").tag(3.0); Text("10 วินาที").tag(10.0)
-                    Text("1 นาที").tag(60.0); Text("5 นาที").tag(300.0); Text("ไม่ซ่อน").tag(0.0)  // 0 = never
+                Section("ฟีเจอร์") {
+                    Toggle(isOn: $youtube) { row("play.rectangle.fill", .red, "YouTube จากเบราว์เซอร์") }
+                    Toggle(isOn: $btBanner) { row("bell.badge.fill", .orange, "แจ้งเตือนเมื่อ Bluetooth หลุด") }
+                    Toggle(isOn: $deviceIcons) { row("airpods", .indigo, "ไอคอนอุปกรณ์ในการ์ด") }
+                }
+                Section("ระบบ") {
+                    Toggle(isOn: $launchAtLogin) { row("power", .green, "เปิดเองตอนเข้าเครื่อง") }
+                        .onChange(of: launchAtLogin) { Pref.applyLaunchAtLogin() }
                 }
             }
-            Section("ฟีเจอร์") {
-                Toggle("แสดง YouTube จากเบราว์เซอร์", isOn: $youtube)
-                Toggle("แจ้งเตือนเมื่อ Bluetooth หลุด", isOn: $btBanner)
-                Toggle("ไอคอนอุปกรณ์ในการ์ด", isOn: $deviceIcons)
-            }
-            Section("ระบบ") {
-                Toggle("เปิดเองตอนเข้าเครื่อง", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { Pref.applyLaunchAtLogin() }
-            }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
             HStack {
-                Button("คืนค่าเริ่มต้น") { Pref.reset(); Pref.applyLaunchAtLogin() }
+                Button("คืนค่าเริ่มต้น") { withAnimation { Pref.reset() }; Pref.applyLaunchAtLogin() }
                 Spacer()
-                Button("ปิดแอป") { NSApp.terminate(nil) }
+                Button("ปิด Dynamic Island", role: .destructive) { NSApp.terminate(nil) }
+            }
+            .controlSize(.large)
+            .padding(.horizontal, 20).padding(.bottom, 18)
+        }
+        .frame(width: 440)
+        .fixedSize()
+    }
+
+    /// Live preview of the compact island with the chosen wave color.
+    private var header: some View {
+        VStack(spacing: 10) {
+            HStack {
+                RoundedRectangle(cornerRadius: 5).fill(.linearGradient(colors: [.pink, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 22, height: 22)
+                    .overlay(Image(systemName: "music.note").font(.system(size: 11, weight: .bold)).foregroundStyle(.white))
+                Spacer()
+                Bars(playing: true, color: Pref.color(waveColor))
+            }
+            .padding(.horizontal, 12)
+            .frame(width: 280, height: 38)
+            .background(.black, in: Capsule())
+            .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
+            .animation(.easeInOut(duration: 0.25), value: waveColor)
+            Text("Dynamic Island").font(.title3.weight(.semibold))
+            Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 26).padding(.bottom, 6)
+        .background(LinearGradient(colors: [Pref.color(waveColor).opacity(0.18), .clear], startPoint: .top, endPoint: .bottom))
+    }
+
+    private var swatches: some View {
+        HStack(spacing: 8) {
+            ForEach(Pref.colors, id: \.id) { c in
+                Button { withAnimation(.spring(duration: 0.25)) { waveColor = c.id } } label: {
+                    Circle().fill(c.color).frame(width: 18, height: 18)
+                        .overlay(Circle().strokeBorder(.black.opacity(0.15)))
+                        .padding(3)
+                        .overlay(Circle().strokeBorder(waveColor == c.id ? Color.primary : .clear, lineWidth: 2))
+                }
+                .buttonStyle(.plain)
+                .help(c.name)
+                .accessibilityLabel(c.name)
+                .accessibilityAddTraits(waveColor == c.id ? .isSelected : [])
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 380)
-        .fixedSize()
+    }
+
+    /// System-Settings-style row: white symbol on a colored rounded square.
+    private func row(_ icon: String, _ tint: Color, _ title: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                .frame(width: 24, height: 24).background(tint.gradient, in: RoundedRectangle(cornerRadius: 6))
+            Text(title)
+        }
     }
 }
 
@@ -75,8 +128,10 @@ enum SettingsWindow {
     static func show() {
         if window == nil {
             let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
-            w.title = "ตั้งค่า Dynamic Island"
-            w.styleMask = [.titled, .closable]
+            w.title = "ตั้งค่า"
+            w.styleMask = [.titled, .closable, .fullSizeContentView]
+            w.titlebarAppearsTransparent = true
+            w.titleVisibility = .hidden
             w.isReleasedWhenClosed = false
             w.center()
             window = w
