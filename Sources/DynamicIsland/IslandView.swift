@@ -10,7 +10,7 @@ struct IslandView: View {
     private var size: CGSize {
         if expanded { return CGSize(width: 380, height: 150) }
         if banner != nil { return CGSize(width: 340, height: 36) }
-        let icons = CGFloat(bt.devices.count) * 20
+        let icons = bt.devices.reduce(CGFloat(0)) { $0 + ($1.battery?.headline != nil ? 48 : 20) }
         return np.track == nil ? CGSize(width: 200 + (icons > 0 ? icons + 20 : 0), height: 32)
                                : CGSize(width: 280 + icons, height: 32)
     }
@@ -51,8 +51,17 @@ struct IslandView: View {
     private var deviceIcons: some View {
         HStack(spacing: 6) {
             ForEach(bt.devices, id: \.self) { d in
-                Image(systemName: d.icon).font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85)).help(d.name).accessibilityLabel(d.name)
+                HStack(spacing: 3) {
+                    Image(systemName: d.icon).font(.system(size: 12, weight: .medium))
+                    if let n = d.battery?.headline {
+                        Text("\(n)%").font(.system(size: 10, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(n <= 20 ? .red : .white.opacity(0.85))
+                    }
+                }
+                .foregroundStyle(.white.opacity(0.85))
+                .help(d.battery.map { "\(d.name) — \($0.detail)" } ?? d.name)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(d.battery.map { "\(d.name) \($0.detail)" } ?? d.name)
             }
         }
     }

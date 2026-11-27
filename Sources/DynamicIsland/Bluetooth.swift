@@ -18,6 +18,18 @@ struct BTEvent: Equatable {
 struct BTDevice: Hashable {
     var name: String
     var icon: String
+    var battery: Battery? = nil
+}
+
+/// Percentages; AirPods report left/right/case, other headphones often a single "main" level.
+struct Battery: Hashable {
+    var left: Int?, right: Int?, case_: Int?, main: Int?
+    /// The number to show next to the icon: the emptier earbud, else the main level.
+    var headline: Int? { [left, right].compactMap { $0 }.min() ?? main }
+    var detail: String {
+        [left.map { "ซ้าย \($0)%" }, right.map { "ขวา \($0)%" }, case_.map { "กล่อง \($0)%" }, main.map { "\($0)%" }]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
 }
 
 @MainActor
@@ -29,6 +41,8 @@ final class BluetoothWatcher: ObservableObject {
     private var connected: Set<String>?   // addresses; nil until the first scan
     private var hideWork: DispatchWorkItem?
     private var audio: [AudioDeviceID: String]?
+    private var batteries: [String: Battery] = [:]
+    private var batteryBusy = false
 
     func start() {
         scan()
@@ -41,6 +55,10 @@ final class BluetoothWatcher: ObservableObject {
         }
         Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.scan() }
+        }
+        refreshBattery()
+        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshBattery() }
         }
     }
 
@@ -63,7 +81,48 @@ final class BluetoothWatcher: ObservableObject {
         // AirPods show up twice in CoreAudio (mic + speaker); dedupe by name.
         var seen = Set<String>()
         let list = (headphones + others).filter { seen.insert($0.name).inserted }.sorted { $0.name < $1.name }
+            .map { d in var d = d; d.battery = batteries[d.name]; return d }
         if list != devices { devices = list }
+    }
+
+    /// Battery levels come from system_profiler (≈50 ms); there is no public API for AirPods battery.
+    private func refreshBattery() {
+        guard !batteryBusy else { return }
+        batteryBusy = true
+        DispatchQueue.global(qos: .utility).async {
+            let b = Self.readBatteries()
+            DispatchQueue.main.async {
+                self.batteryBusy = false
+                self.batteries = b
+                self.publishList()
+            }
+        }
+    }
+
+    nonisolated private static func readBatteries() -> [String: Battery] {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
+        p.arguments = ["SPBluetoothDataType", "-json"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return [:] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let bt = (root["SPBluetoothDataType"] as? [[String: Any]])?.first,
+              let devs = bt["device_connected"] as? [[String: [String: Any]]] else { return [:] }
+        let pct = { (v: Any?) -> Int? in (v as? String).flatMap { Int($0.replacingOccurrences(of: "%", with: "")) } }
+        var out: [String: Battery] = [:]
+        for entry in devs {
+            for (name, info) in entry {
+                let b = Battery(left: pct(info["device_batteryLevelLeft"]), right: pct(info["device_batteryLevelRight"]),
+                                case_: pct(info["device_batteryLevelCase"]), main: pct(info["device_batteryLevelMain"]))
+                // The same AirPods can be listed twice (one entry missing the right bud); keep the fuller one.
+                if b.headline != nil, out[name] == nil || (out[name]!.right == nil && b.right != nil) { out[name] = b }
+            }
+        }
+        return out
     }
 
     private static func isAudio(_ d: IOBluetoothDevice) -> Bool {
@@ -118,6 +177,7 @@ final class BluetoothWatcher: ObservableObject {
     }
 
     private func post(_ name: String, icon: String, connected: Bool) {
+        if connected { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.refreshBattery() } }
         log.notice("post \(name, privacy: .public) connected=\(connected, privacy: .public)")
         event = BTEvent(name: name, icon: icon, connected: connected)
         hideWork?.cancel()
