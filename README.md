@@ -1,6 +1,6 @@
 # Mac Dynamic Island
 
-แอปเล็กๆ ที่แสดง "Dynamic Island" ตรงรอยบากจอ Mac แสดงเพลงที่กำลังเล่นจาก **Spotify** หรือ **Apple Music**
+แอปเล็กๆ ที่แสดง "Dynamic Island" ตรงรอยบากจอ Mac แสดงเพลงหรือคลิปที่กำลังเล่นจาก **Spotify**, **Apple Music** หรือ **YouTube** ใน Chrome / Brave / Safari
 
 - ย่อ: ปกเพลง + แท่งเสียงขยับ
 - เอาเมาส์ไปชี้: ขยายเป็นการ์ด มีปกเพลง ชื่อเพลง ศิลปิน แถบเวลา และปุ่ม ก่อนหน้า / เล่น-หยุด / ถัดไป
@@ -20,7 +20,14 @@ open /Applications/DynamicIsland.app
 
 ปิดแอป: `pkill DynamicIsland`
 
+## YouTube
+
+ต้องเปิดให้เบราว์เซอร์รับ JavaScript จาก AppleScript ก่อน ไม่งั้นจะเห็นแค่ชื่อคลิป ไม่มีแถบเวลาและปุ่มควบคุม
+
+- **Chrome / Brave:** เมนู View → Developer → Allow JavaScript from Apple Events
+- **Safari:** Settings → Advanced → เปิด "Show features for web developers" แล้วไปที่เมนู Develop → Allow JavaScript from Apple Events
+
 ## ข้อจำกัด
 
-- รองรับเฉพาะ Spotify และ Music ยังไม่รองรับคลิปในเบราว์เซอร์ (YouTube) เพราะ macOS ไม่เปิดให้แอปภายนอกอ่านข้อมูล Now Playing ของระบบ
+- รองรับ YouTube เฉพาะหน้าดูคลิป (`youtube.com/watch`) ใน Chrome, Brave และ Safari
 - ต้องใช้ macOS 14 ขึ้นไป

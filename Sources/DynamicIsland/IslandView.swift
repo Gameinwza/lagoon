@@ -9,7 +9,10 @@ struct IslandView: View {
         if expanded { return CGSize(width: 380, height: 150) }
         return np.track == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
     }
-    private var accent: Color { np.track?.app == "Spotify" ? .green : .pink }
+    private var accent: Color {
+        if np.track?.isVideo == true { return .red }
+        return np.track?.app == "Spotify" ? .green : .pink
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +42,7 @@ struct IslandView: View {
                 Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
             } else {
                 LinearGradient(colors: [accent, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
-                Image(systemName: "music.note").font(.system(size: s * 0.45)).foregroundStyle(.white)
+                Image(systemName: np.track?.isVideo == true ? "play.rectangle.fill" : "music.note").font(.system(size: s * 0.45)).foregroundStyle(.white)
             }
         }
         .frame(width: s, height: s)
@@ -70,18 +73,18 @@ struct IslandView: View {
                 Spacer()
                 Bars(playing: t.playing, color: accent)
             }
-            TimelineView(.animation(paused: !t.playing)) { tl in
+            if t.duration > 0 { TimelineView(.animation(paused: !t.playing)) { tl in
                 let pos = t.position(at: tl.date)
                 HStack(spacing: 8) {
                     Text(fmt(pos)).font(.caption2.monospacedDigit())
                     ProgressView(value: pos, total: max(t.duration, 1)).tint(.white)
                     Text(fmt(t.duration)).font(.caption2.monospacedDigit())
                 }.foregroundStyle(.gray)
-            }
+            } }
             HStack(spacing: 36) {
-                btn("backward.fill", "ก่อนหน้า") { np.send("previous track") }
-                btn(t.playing ? "pause.fill" : "play.fill", "เล่น/หยุด") { np.send("playpause") }
-                btn("forward.fill", "ถัดไป") { np.send("next track") }
+                btn("backward.fill", "ก่อนหน้า") { np.send(.previous) }
+                btn(t.playing ? "pause.fill" : "play.fill", "เล่น/หยุด") { np.send(.playPause) }
+                btn("forward.fill", "ถัดไป") { np.send(.next) }
             }
         }
         .foregroundStyle(.white)

@@ -17,7 +17,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
-  <key>NSAppleEventsUsageDescription</key><string>อ่านชื่อเพลงที่กำลังเล่นจาก Spotify และ Music</string>
+  <key>NSAppleEventsUsageDescription</key><string>อ่านเพลงหรือคลิปที่กำลังเล่นจาก Spotify, Music และ YouTube ในเบราว์เซอร์</string>
 </dict></plist>
 EOF
 codesign --force --sign - "$APP"

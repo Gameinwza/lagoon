@@ -1,22 +1,32 @@
 import AppKit
 
 struct Track: Equatable {
-    var app: String      // "Spotify" or "Music"
+    var app: String      // "Spotify", "Music", "Google Chrome", "Brave Browser" or "Safari"
     var title: String
     var artist: String
     var playing: Bool
     var position: Double
     var duration: Double
     var fetchedAt = Date()
+    // YouTube only: which tab, and the thumbnail.
+    var tab: (window: Int, index: Int)? = nil
+    var artURL: URL? = nil
+
+    var isVideo: Bool { tab != nil }
 
     /// Position extrapolated to `now`, so the progress bar moves smoothly between polls.
     func position(at now: Date) -> Double {
         min(duration, position + (playing ? now.timeIntervalSince(fetchedAt) : 0))
     }
+
+    static func == (a: Track, b: Track) -> Bool {
+        a.app == b.app && a.title == b.title && a.artist == b.artist && a.playing == b.playing
+            && a.position == b.position && a.duration == b.duration && a.fetchedAt == b.fetchedAt
+            && a.tab?.window == b.tab?.window && a.tab?.index == b.tab?.index && a.artURL == b.artURL
+    }
 }
 
-/// Reads the current track from Spotify or Apple Music via AppleScript.
-/// shortcut: only Spotify + Music; browser video (YouTube) needs MediaRemote, which Apple blocks for third-party apps.
+/// Reads what's playing from Spotify, Apple Music, or a YouTube tab via AppleScript.
 @MainActor
 final class NowPlaying: ObservableObject {
     @Published var track: Track?
@@ -34,18 +44,23 @@ final class NowPlaying: ObservableObject {
         }
     }
 
-    private static let bundles = ["Spotify": "com.spotify.client", "Music": "com.apple.Music"]
+    // Checked in this order; the first one that is actually playing wins.
+    private static let bundles: [(String, String)] = [
+        ("Spotify", "com.spotify.client"), ("Music", "com.apple.Music"),
+        ("Google Chrome", "com.google.Chrome"), ("Brave Browser", "com.brave.Browser"), ("Safari", "com.apple.Safari"),
+    ]
 
     private func poll() {
         guard !busy else { return }
         // Never send AppleScript to a closed app: `tell` would launch it.
-        let running = NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)
-        let apps = ["Spotify", "Music"].filter { running.contains(Self.bundles[$0]!) }
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        let apps = Self.bundles.filter { running.contains($0.1) }.map(\.0)
         busy = true
         queue.async {
             var found: Track?
             for app in apps {
-                if let t = Self.query(app), t.playing || found == nil { found = t }
+                let t = ["Spotify", "Music"].contains(app) ? Self.queryPlayer(app) : Self.queryYouTube(app)
+                if let t, t.playing || found == nil { found = t }
                 if found?.playing == true { break }
             }
             DispatchQueue.main.async {
@@ -63,7 +78,18 @@ final class NowPlaying: ObservableObject {
         return a == b
     }
 
-    nonisolated private static func query(_ app: String) -> Track? {
+    nonisolated private static func run(_ src: String) -> NSAppleEventDescriptor? {
+        var err: NSDictionary?
+        return NSAppleScript(source: src)?.executeAndReturnError(&err)
+    }
+
+    nonisolated private static func num(_ s: String) -> Double {
+        Double(s.replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    // MARK: Spotify / Music
+
+    nonisolated private static func queryPlayer(_ app: String) -> Track? {
         // Spotify reports duration in ms, Music in seconds.
         let dur = app == "Spotify" ? "(duration of current track) / 1000" : "duration of current track"
         let src = """
@@ -73,15 +99,73 @@ final class NowPlaying: ObservableObject {
             (player state is playing) & "\\n" & (player position) & "\\n" & (\(dur))
         end tell
         """
-        var err: NSDictionary?
-        guard let out = NSAppleScript(source: src)?.executeAndReturnError(&err).stringValue,
-              !out.isEmpty else { return nil }
+        guard let out = run(src)?.stringValue, !out.isEmpty else { return nil }
         let p = out.components(separatedBy: "\n")
         guard p.count == 5 else { return nil }
-        let num = { (s: String) in Double(s.replacingOccurrences(of: ",", with: ".")) ?? 0 }
         return Track(app: app, title: p[0], artist: p[1], playing: p[2] == "true",
                      position: num(p[3]), duration: num(p[4]))
     }
+
+    // MARK: YouTube in a browser
+
+    /// Reads the <video> element. Needs "Allow JavaScript from Apple Events" in the browser;
+    /// without it we still show the tab title, just no progress or play state.
+    nonisolated private static let readJS =
+        "(()=>{const v=document.querySelector('video');if(!v)return '';" +
+        "const c=document.querySelector('ytd-watch-metadata ytd-channel-name a, #owner #channel-name a');" +
+        "return [v.paused?0:1,v.currentTime,v.duration||0,c?c.textContent.trim():''].join('|')})()"
+
+    nonisolated private static func jsCall(_ app: String, _ js: String, tab: String) -> String {
+        app == "Safari" ? "do JavaScript \"\(js)\" in \(tab)" : "execute \(tab) javascript \"\(js)\""
+    }
+
+    nonisolated private static func queryYouTube(_ app: String) -> Track? {
+        let titleProp = app == "Safari" ? "name" : "title"
+        // Returns the first playing YouTube tab, else the first YouTube tab.
+        let src = """
+        tell application "\(app)"
+          set firstHit to ""
+          repeat with w in windows
+            set i to 0
+            repeat with t in tabs of w
+              set i to i + 1
+              if URL of t contains "youtube.com/watch" then
+                set r to ""
+                try
+                  set r to \(jsCall(app, readJS, tab: "t"))
+                end try
+                set hit to (id of w as text) & "\\n" & i & "\\n" & (URL of t) & "\\n" & (\(titleProp) of t) & "\\n" & r
+                if r starts with "1|" then return hit
+                if firstHit is "" then set firstHit to hit
+              end if
+            end repeat
+          end repeat
+          return firstHit
+        end tell
+        """
+        guard let out = run(src)?.stringValue, !out.isEmpty else { return nil }
+        let p = out.components(separatedBy: "\n")
+        guard p.count >= 4, let win = Int(p[0]), let idx = Int(p[1]) else { return nil }
+        // "(3) Video name - YouTube" -> "Video name"
+        let title = p[3].replacingOccurrences(of: #"^\(\d+\)\s*|\s*-\s*YouTube$"#, with: "", options: .regularExpression)
+        let vid = URLComponents(string: p[2])?.queryItems?.first { $0.name == "v" }?.value
+        let js = p.count > 4 ? p[4].components(separatedBy: "|") : []
+        var t = Track(app: app, title: title, artist: "YouTube", playing: false, position: 0, duration: 0,
+                      tab: (win, idx), artURL: vid.flatMap { URL(string: "https://i.ytimg.com/vi/\($0)/hqdefault.jpg") })
+        if js.count == 4 {
+            t.playing = js[0] == "1"
+            t.position = num(js[1])
+            t.duration = num(js[2])
+            if !js[3].isEmpty { t.artist = js[3] }
+        }
+        return t
+    }
+
+    nonisolated private static func tabRef(_ t: Track) -> String {
+        "tab \(t.tab!.index) of window id \(t.tab!.window)"
+    }
+
+    // MARK: Art, open, controls
 
     /// Fetch cover art only when the song changes, never on every poll.
     private func loadArtIfNeeded() {
@@ -91,51 +175,65 @@ final class NowPlaying: ObservableObject {
         artKey = key
         art = nil
         queue.async {
-            let img = Self.fetchArt(t.app)
+            let img = Self.fetchArt(t)
             DispatchQueue.main.async { if self.artKey == key { self.art = img } }
         }
     }
 
-    nonisolated private static func fetchArt(_ app: String) -> NSImage? {
-        var err: NSDictionary?
-        if app == "Spotify" {
-            // Spotify gives an https URL to the cover.
-            guard let s = NSAppleScript(source: "tell application \"Spotify\" to artwork url of current track")?
-                    .executeAndReturnError(&err).stringValue,
-                  let url = URL(string: s), url.scheme == "https",
-                  let data = try? Data(contentsOf: url) else { return nil }
-            return NSImage(data: data)
+    nonisolated private static func fetchArt(_ t: Track) -> NSImage? {
+        var url = t.artURL
+        if t.app == "Spotify", let s = run("tell application \"Spotify\" to artwork url of current track")?.stringValue {
+            url = URL(string: s)
         }
-        // Music returns the image bytes directly.
-        let d = NSAppleScript(source: "tell application \"Music\" to get raw data of artwork 1 of current track")?
-            .executeAndReturnError(&err).data
-        return d.flatMap(NSImage.init(data:))
+        if let url, url.scheme == "https", let data = try? Data(contentsOf: url) { return NSImage(data: data) }
+        if t.app == "Music" {
+            // Music returns the image bytes directly.
+            guard let d = run("tell application \"Music\" to get raw data of artwork 1 of current track")?.data
+            else { return nil }
+            return NSImage(data: d)
+        }
+        return nil
     }
 
-    /// Show the current song in its app.
+    /// Show the current song/video in its app.
     func openInApp() {
-        guard let app = track?.app else { return }
+        guard let t = track else { return }
         queue.async {
-            var err: NSDictionary?
-            if app == "Spotify" {
+            switch t.app {
+            case "Spotify":
                 // spotify:track:... opens that song's page in Spotify.
-                if let s = NSAppleScript(source: "tell application \"Spotify\" to spotify url of current track")?
-                        .executeAndReturnError(&err).stringValue,
+                if let s = Self.run("tell application \"Spotify\" to spotify url of current track")?.stringValue,
                    let url = URL(string: s), url.scheme == "spotify" {
                     DispatchQueue.main.async { NSWorkspace.shared.open(url) }
                 }
-            } else {
-                NSAppleScript(source: "tell application \"Music\"\nactivate\nreveal current track\nend tell")?
-                    .executeAndReturnError(&err)
+            case "Music":
+                _ = Self.run("tell application \"Music\"\nactivate\nreveal current track\nend tell")
+            case "Safari":
+                let w = "window id \(t.tab!.window)"
+                _ = Self.run("tell application \"Safari\"\nset current tab of \(w) to \(Self.tabRef(t))\nset index of \(w) to 1\nactivate\nend tell")
+            default:
+                let w = "window id \(t.tab!.window)"
+                _ = Self.run("tell application \"\(t.app)\"\nset active tab index of \(w) to \(t.tab!.index)\nset index of \(w) to 1\nactivate\nend tell")
             }
         }
     }
 
-    func send(_ command: String) {
-        guard let app = track?.app else { return }
+    enum Command { case playPause, next, previous }
+
+    func send(_ c: Command) {
+        guard let t = track else { return }
         queue.async {
-            var err: NSDictionary?
-            NSAppleScript(source: "tell application \"\(app)\" to \(command)")?.executeAndReturnError(&err)
+            if t.isVideo {
+                let js = switch c {
+                case .playPause: "(()=>{const v=document.querySelector('video');v.paused?v.play():v.pause()})()"
+                case .next: "document.querySelector('.ytp-next-button').click()"
+                case .previous: "document.querySelector('video').currentTime=0"
+                }
+                _ = Self.run("tell application \"\(t.app)\" to \(Self.jsCall(t.app, js, tab: Self.tabRef(t)))")
+            } else {
+                let cmd = switch c { case .playPause: "playpause"; case .next: "next track"; case .previous: "previous track" }
+                _ = Self.run("tell application \"\(t.app)\" to \(cmd)")
+            }
             DispatchQueue.main.async { self.poll() }
         }
     }
