@@ -269,15 +269,13 @@ struct Scrubber: View {
         GeometryReader { g in
             let f = drag ?? (duration > 0 ? min(1, position / duration) : 0)
             let active = hover || drag != nil
+            // Apple-style: no knob, the bar just gets a little thicker and brighter under the pointer.
             ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.2))
-                Capsule().fill(.white).frame(width: max(0, g.size.width * f))
-                Circle().fill(.white).frame(width: 12, height: 12)
-                    .offset(x: g.size.width * f - 6)
-                    .opacity(active ? 1 : 0)
-                    .shadow(radius: 2)
+                Capsule().fill(.white.opacity(active ? 0.25 : 0.18))
+                Capsule().fill(.white.opacity(active ? 1 : 0.85)).frame(width: max(0, g.size.width * f))
             }
-            .frame(height: active ? 7 : 4)
+            .frame(height: active ? 8 : 5)
+            .clipShape(Capsule())
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
@@ -287,7 +285,7 @@ struct Scrubber: View {
                     drag = nil
                 })
             .onHover { hover = $0; $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
-            .animation(.easeOut(duration: 0.15), value: active)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: active)
         }
         .frame(height: 16)
         .accessibilityElement()
