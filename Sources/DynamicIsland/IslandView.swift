@@ -14,9 +14,8 @@ struct IslandView: View {
             return CGSize(width: 380, height: 150 + rows)
         }
         if banner != nil { return CGSize(width: 340, height: 36) }
-        let icons = bt.devices.reduce(CGFloat(0)) { $0 + ($1.battery?.headline != nil ? 48 : 20) }
-        return np.track == nil ? CGSize(width: 200 + (icons > 0 ? icons + 20 : 0), height: 32)
-                               : CGSize(width: 280 + icons, height: 32)
+        // Device icons only appear in the expanded card, not here.
+        return np.track == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
     }
     private var accent: Color {
         if np.track?.isVideo == true { return .red }
@@ -31,8 +30,6 @@ struct IslandView: View {
                     .fill(.black)
                 if let e = banner {
                     btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
-                } else if np.track == nil, !bt.devices.isEmpty {
-                    HStack { Spacer(); deviceIcons }.padding(.horizontal, 14).frame(height: 32)
                 } else if let t = np.track {
                     if expanded {
                         full(t).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
@@ -125,7 +122,7 @@ struct IslandView: View {
     }
 
     private func compact(_ t: Track) -> some View {
-        HStack(spacing: 10) { art(20); Spacer(); deviceIcons; Bars(playing: t.playing, color: accent) }
+        HStack { art(20); Spacer(); Bars(playing: t.playing, color: accent) }
             .padding(.horizontal, 12).frame(height: 32)
     }
 
