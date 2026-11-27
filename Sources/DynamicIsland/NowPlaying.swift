@@ -36,6 +36,7 @@ final class NowPlaying: ObservableObject {
     // AppleScript is synchronous (tens of ms per call); keep it off the main thread so animations don't stutter.
     private let queue = DispatchQueue(label: "nowplaying.applescript")
     private var busy = false
+    private var generation = 0  // bumped on every command so polls started earlier can't undo it
 
     func start() {
         poll()
@@ -56,6 +57,7 @@ final class NowPlaying: ObservableObject {
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
         let apps = Self.bundles.filter { running.contains($0.1) }.map(\.0)
         busy = true
+        let gen = generation
         queue.async {
             var found: Track?
             for app in apps {
@@ -65,6 +67,7 @@ final class NowPlaying: ObservableObject {
             }
             DispatchQueue.main.async {
                 self.busy = false
+                guard gen == self.generation else { return }  // stale: a command ran meanwhile
                 if !Self.same(found, self.track) { self.track = found }
                 self.loadArtIfNeeded()
             }
@@ -221,7 +224,15 @@ final class NowPlaying: ObservableObject {
     enum Command { case playPause, next, previous }
 
     func send(_ c: Command) {
-        guard let t = track else { return }
+        guard var t = track else { return }
+        generation += 1
+        if c == .playPause {
+            // Flip the button now; the next poll confirms it.
+            t.position = t.position(at: Date())
+            t.fetchedAt = Date()
+            t.playing.toggle()
+            track = t
+        }
         queue.async {
             if t.isVideo {
                 let js = switch c {
@@ -234,7 +245,8 @@ final class NowPlaying: ObservableObject {
                 let cmd = switch c { case .playPause: "playpause"; case .next: "next track"; case .previous: "previous track" }
                 _ = Self.run("tell application \"\(t.app)\" to \(cmd)")
             }
-            DispatchQueue.main.async { self.poll() }
+            // The player needs a moment to apply the command before it reports the new state.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.busy = false; self.poll() }
         }
     }
 }
