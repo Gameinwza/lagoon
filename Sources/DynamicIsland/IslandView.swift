@@ -3,10 +3,13 @@ import SwiftUI
 struct IslandView: View {
     @ObservedObject var np: NowPlaying
     @ObservedObject var state: IslandState
+    @ObservedObject var bt: BluetoothWatcher
 
     private var expanded: Bool { state.hover && np.track != nil }
+    private var banner: BTEvent? { expanded ? nil : bt.event }
     private var size: CGSize {
         if expanded { return CGSize(width: 380, height: 150) }
+        if banner != nil { return CGSize(width: 340, height: 36) }
         return np.track == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
     }
     private var accent: Color {
@@ -20,7 +23,9 @@ struct IslandView: View {
                 UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 32 : 14,
                                        bottomTrailingRadius: expanded ? 32 : 14)
                     .fill(.black)
-                if let t = np.track {
+                if let e = banner {
+                    btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else if let t = np.track {
                     if expanded {
                         full(t).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
                     } else {
@@ -33,7 +38,21 @@ struct IslandView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: np.track?.title)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.event)
         .onChange(of: size, initial: true) { _, s in state.size = s }
+    }
+
+    private func btBanner(_ e: BTEvent) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: e.icon).font(.system(size: 15, weight: .semibold))
+            Text(e.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+            Spacer()
+            Text(e.connected ? "เชื่อมต่อแล้ว" : "ตัดการเชื่อมต่อ").font(.system(size: 12, weight: .medium))
+                .foregroundStyle(e.connected ? .green : .gray)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14).frame(height: 36)
+        .accessibilityElement(children: .combine)
     }
 
     private func art(_ s: CGFloat) -> some View {

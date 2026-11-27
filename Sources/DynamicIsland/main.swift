@@ -42,14 +42,16 @@ final class IslandPanel: NSPanel {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let np = NowPlaying()
     let state = IslandState()
+    let bt = BluetoothWatcher()
     var panel: IslandPanel!
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        panel = IslandPanel(view: NSHostingView(rootView: IslandView(np: np, state: state)))
+        panel = IslandPanel(view: NSHostingView(rootView: IslandView(np: np, state: state, bt: bt)))
         panel.place()
         panel.orderFrontRegardless()
         TopSpace.add(panel)
         np.start()
+        bt.start()
         // Start automatically at login (shows under System Settings → General → Login Items).
         if SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
