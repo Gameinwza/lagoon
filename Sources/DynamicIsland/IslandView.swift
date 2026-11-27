@@ -13,7 +13,7 @@ struct IslandView: View {
             let rows = showBT ? bt.devices.reduce(CGFloat(14)) { $0 + ($1.battery != nil ? 96 : 26) } : 0
             return CGSize(width: 380, height: 150 + rows)
         }
-        if banner != nil { return CGSize(width: 340, height: 36) }
+        if banner != nil { return CGSize(width: 340, height: Self.notch + 40) }
         // Device icons only appear in the expanded card, not here.
         return np.track == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
     }
@@ -25,8 +25,8 @@ struct IslandView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 32 : 14,
-                                       bottomTrailingRadius: expanded ? 32 : 14)
+                UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 32 : banner != nil ? 22 : 14,
+                                       bottomTrailingRadius: expanded ? 32 : banner != nil ? 22 : 14)
                     .fill(.black)
                 if let e = banner {
                     btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -94,6 +94,9 @@ struct IslandView: View {
         }
     }
 
+    /// Height of the camera notch; content must sit below it or the hardware covers it.
+    static let notch: CGFloat = NSScreen.screens.map(\.safeAreaInsets.top).max().flatMap { $0 > 0 ? $0 : nil } ?? 32
+
     private func btBanner(_ e: BTEvent) -> some View {
         HStack(spacing: 8) {
             Image(systemName: e.icon).font(.system(size: 15, weight: .semibold))
@@ -103,7 +106,8 @@ struct IslandView: View {
                 .foregroundStyle(e.connected ? Color.green : Color.orange)  // gray was unreadable on black
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 14).frame(height: 36)
+        .padding(.horizontal, 18).frame(height: 40)
+        .padding(.top, Self.notch)  // drop the row below the notch
         .accessibilityElement(children: .combine)
     }
 
