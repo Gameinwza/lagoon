@@ -21,8 +21,9 @@ final class BluetoothWatcher: NSObject, ObservableObject {
         connectNote = IOBluetoothDevice.register(forConnectNotifications: self, selector: #selector(connected(_:device:)))
     }
 
+    // IOBluetooth calls these on a background thread, so hop to main (assumeIsolated crashed here).
     @objc nonisolated private func connected(_ note: IOBluetoothUserNotification, device: IOBluetoothDevice) {
-        MainActor.assumeIsolated {
+        DispatchQueue.main.async { [self] in
             device.register(forDisconnectNotification: self, selector: #selector(disconnected(_:device:)))
             // Registering fires once for every device already connected at launch; skip those.
             if Date().timeIntervalSince(started) > 2 { show(device, connected: true) }
@@ -31,7 +32,7 @@ final class BluetoothWatcher: NSObject, ObservableObject {
 
     @objc nonisolated private func disconnected(_ note: IOBluetoothUserNotification, device: IOBluetoothDevice) {
         note.unregister()
-        MainActor.assumeIsolated { show(device, connected: false) }
+        DispatchQueue.main.async { [self] in show(device, connected: false) }
     }
 
     private func show(_ d: IOBluetoothDevice, connected: Bool) {
