@@ -80,17 +80,27 @@ struct SettingsView: View {
         .fixedSize()
     }
 
-    /// Live preview of the compact island with the chosen wave color.
+    @State private var previewExpanded = true
+
+    /// Title row plus a live sample: a miniature Mac screen with the island at its notch.
     private var header: some View {
-        VStack(spacing: 10) {
-            Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 84, height: 84)
-                .accessibilityHidden(true)
-            Text("Lagoon").font(.title3.weight(.semibold))
-            Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 14) {
+            HStack(spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 36, height: 36)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Lagoon").font(.headline)
+                    Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("ตัวอย่าง", selection: $previewExpanded.animation(.spring(response: 0.42, dampingFraction: 0.78))) {
+                    Text("ย่อ").tag(false); Text("ขยาย").tag(true)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+            }
+            PreviewScreen(expanded: previewExpanded, wave: Pref.color(waveColor), showDevices: deviceIcons)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 26).padding(.bottom, 6)
-        .background(LinearGradient(colors: [Pref.color(waveColor).opacity(0.18), .clear], startPoint: .top, endPoint: .bottom))
+        .padding(.horizontal, 20).padding(.top, 34)
     }
 
     private var swatches: some View {
@@ -136,5 +146,84 @@ enum SettingsWindow {
         }
         NSApp.activate(ignoringOtherApps: true)  // only when the user asked for settings
         window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// Sample of the island on a tiny Mac screen, so settings changes are visible before music plays.
+private struct PreviewScreen: View {
+    var expanded: Bool
+    var wave: Color
+    var showDevices: Bool
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(red: 0.05, green: 0.2, blue: 0.4), Color(red: 0.1, green: 0.55, blue: 0.7),
+                                    Color(red: 0.45, green: 0.85, blue: 0.8)], startPoint: .top, endPoint: .bottom)
+            // Menu bar with a few placeholder items either side of the notch.
+            HStack(spacing: 8) {
+                Image(systemName: "apple.logo").font(.system(size: 9))
+                ForEach([22, 30, 18], id: \.self) { w in Capsule().frame(width: CGFloat(w), height: 4) }
+                Spacer()
+                ForEach([14, 14, 34], id: \.self) { w in Capsule().frame(width: CGFloat(w), height: 4) }
+            }
+            .foregroundStyle(.white.opacity(0.7))
+            .padding(.horizontal, 12).frame(height: 18)
+            .background(.black.opacity(0.25))
+            island
+        }
+        .frame(height: 170)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.12)))
+        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("ตัวอย่างเกาะ")
+    }
+
+    private var island: some View {
+        ZStack(alignment: .top) {
+            UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 22 : 10, bottomTrailingRadius: expanded ? 22 : 10).fill(.black)
+            if expanded { card.transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top))) }
+            else { compact.transition(.opacity) }
+        }
+        .frame(width: expanded ? 250 : 170, height: expanded ? 112 : 22)
+    }
+
+    private var art: some View {
+        RoundedRectangle(cornerRadius: 4).fill(.linearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+            .overlay(Image(systemName: "music.note").font(.system(size: 7, weight: .bold)).foregroundStyle(.white))
+    }
+
+    private var compact: some View {
+        HStack { art.frame(width: 14, height: 14); Spacer(); Bars(playing: true, color: wave).scaleEffect(0.75) }
+            .padding(.horizontal, 9).frame(height: 22)
+    }
+
+    private var card: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                art.frame(width: 32, height: 32)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Ocean Drive").font(.system(size: 11, weight: .semibold))
+                    Text("Sample Artist").font(.system(size: 9)).foregroundStyle(.gray)
+                }
+                Spacer()
+                Bars(playing: true, color: wave).scaleEffect(0.8)
+            }
+            HStack(spacing: 0) {
+                Capsule().fill(.white.opacity(0.9)).frame(width: 80, height: 3)
+                Capsule().fill(.white.opacity(0.25)).frame(height: 3)
+            }
+            HStack {
+                Image(systemName: "gearshape.fill").foregroundStyle(.gray)
+                Spacer()
+                HStack(spacing: 22) { Image(systemName: "backward.fill"); Image(systemName: "pause.fill"); Image(systemName: "forward.fill") }
+                Spacer()
+                Image(systemName: showDevices ? "airpods" : "speaker.wave.2.fill")
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .font(.system(size: 11))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
     }
 }
