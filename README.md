@@ -10,6 +10,19 @@
 - ไอคอนเล็กๆ บอกว่ามีอุปกรณ์ Bluetooth อะไรต่ออยู่ พร้อม % แบต (ชี้ค้างเพื่อดูแบตหูซ้าย/ขวา/กล่อง)
 - เปิดเองอัตโนมัติตอนล็อกอิน (ปิดได้ที่ System Settings → General → Login Items)
 
+## ติดตั้ง (สำหรับคนทั่วไป)
+
+1. โหลด `DynamicIsland-x.y.z.zip` ล่าสุดจาก [Releases](https://github.com/Gameinwza/mac-dynamic-island/releases/latest) แล้วแตกไฟล์
+2. ลาก `DynamicIsland.app` ไปไว้ใน **Applications**
+3. แอปยังไม่ได้ notarize กับ Apple เปิดครั้งแรก macOS จะเตือนว่าตรวจสอบนักพัฒนาไม่ได้ ให้ไปที่
+   **System Settings → Privacy & Security** แล้วกด **Open Anyway** (ทำครั้งเดียว)
+   หรือรันใน Terminal: `xattr -dr com.apple.quarantine /Applications/DynamicIsland.app`
+4. กดอนุญาตเมื่อแอปขอควบคุม Spotify / Music / เบราว์เซอร์
+
+ต้องใช้ macOS 14 ขึ้นไป รองรับทั้ง Apple silicon และ Intel
+
+ออกเวอร์ชันใหม่ (เจ้าของ repo): `./release.sh 1.0.1`
+
 ## Build & run
 
 ```sh
