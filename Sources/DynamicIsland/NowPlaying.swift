@@ -53,19 +53,29 @@ final class NowPlaying: ObservableObject {
             }
         }
         // Spotify/Music push changes (above), so they're only re-checked every 10 s as a fallback.
-        // Browsers don't, so YouTube is checked every 0.3 s while a video is showing, else every 2 s.
-        var lastPlayers = Date(), lastBrowsers = Date()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
-            Task { @MainActor in
-                let now = Date()
-                let players = now.timeIntervalSince(lastPlayers) >= 10
-                let browsers = self.track?.isVideo == true || now.timeIntervalSince(lastBrowsers) >= 2
-                guard players || browsers else { return }
-                if players { lastPlayers = now }
-                lastBrowsers = now
-                self.poll(players: players)
-            }
+        // Browsers don't, so YouTube is checked every 0.3 s while a video is playing, 2 s while one is paused, else every 8 s.
+        tick()
+    }
+
+    private var lastPlayers = Date(), lastBrowsers = Date()
+
+    /// One-shot timer that sleeps until the next check is due, so idle means ~1 wakeup every few seconds.
+    private func tick() {
+        let browserGap: Double = track?.isVideo == true ? (track?.playing == true ? 0.3 : 2) : 8
+        let now = Date()
+        let players = now.timeIntervalSince(lastPlayers) >= 10
+        let browsers = now.timeIntervalSince(lastBrowsers) >= browserGap
+        if players || browsers {
+            if players { lastPlayers = now }
+            lastBrowsers = now
+            poll(players: players)
         }
+        let wait = min(10 - now.timeIntervalSince(lastPlayers), browserGap - now.timeIntervalSince(lastBrowsers))
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: max(wait, 0.3), repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }  // scheduled on the main run loop
+        }
+        timer?.tolerance = 0.1
     }
 
     // Checked in this order; the first one that is actually playing wins.
@@ -173,15 +183,15 @@ final class NowPlaying: ObservableObject {
         tell application "\(app)"
           set firstHit to ""
           repeat with w in windows
-            set i to 0
-            repeat with t in tabs of w
-              set i to i + 1
-              if URL of t contains "youtube.com/watch" then
+            set urls to URL of every tab of w
+            repeat with i from 1 to count of urls
+              if item i of urls contains "youtube.com/watch" then
+                set t to tab i of w
                 set r to ""
                 try
                   set r to \(jsCall(app, readJS, tab: "t"))
                 end try
-                set hit to (id of w as text) & "\\n" & i & "\\n" & (URL of t) & "\\n" & (\(titleProp) of t) & "\\n" & r
+                set hit to (id of w as text) & "\\n" & i & "\\n" & (item i of urls) & "\\n" & (\(titleProp) of t) & "\\n" & r
                 if r starts with "1|" then return hit
                 if firstHit is "" then set firstHit to hit
               end if

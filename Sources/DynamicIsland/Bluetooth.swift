@@ -55,7 +55,7 @@ final class BluetoothWatcher: ObservableObject {
         AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, .main) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.scanAudio() }  // delivered on .main, as requested above
         }
-        Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+        Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.scan() }
         }
         refreshBattery()
