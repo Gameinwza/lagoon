@@ -2,10 +2,9 @@ import SwiftUI
 
 struct IslandView: View {
     @ObservedObject var np: NowPlaying
-    var onResize: (CGSize) -> Void = { _ in }
-    @State private var hover = false
+    @ObservedObject var state: IslandState
 
-    private var expanded: Bool { hover && np.track != nil }
+    private var expanded: Bool { state.hover && np.track != nil }
     private var size: CGSize {
         if expanded { return CGSize(width: 380, height: 150) }
         return np.track == nil ? CGSize(width: 200, height: 32) : CGSize(width: 280, height: 32)
@@ -19,16 +18,19 @@ struct IslandView: View {
                                        bottomTrailingRadius: expanded ? 32 : 14)
                     .fill(.black)
                 if let t = np.track {
-                    if expanded { full(t).transition(.opacity) } else { compact(t).transition(.opacity) }
+                    if expanded {
+                        full(t).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
+                    } else {
+                        compact(t).transition(.opacity)
+                    }
                 }
             }
             .frame(width: size.width, height: size.height)
-            .onHover { h in withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { hover = h } }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.spring(response: 0.4, dampingFraction: 0.75), value: np.track?.title)
-        .onChange(of: size, initial: true) { _, s in onResize(s) }
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: np.track?.title)
+        .onChange(of: size, initial: true) { _, s in state.size = s }
     }
 
     private func art(_ s: CGFloat) -> some View {
