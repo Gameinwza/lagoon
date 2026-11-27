@@ -83,18 +83,8 @@ struct SettingsView: View {
     /// Live preview of the compact island with the chosen wave color.
     private var header: some View {
         VStack(spacing: 10) {
-            HStack {
-                RoundedRectangle(cornerRadius: 5).fill(.linearGradient(colors: [.pink, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 22, height: 22)
-                    .overlay(Image(systemName: "music.note").font(.system(size: 11, weight: .bold)).foregroundStyle(.white))
-                Spacer()
-                Bars(playing: true, color: Pref.color(waveColor))
-            }
-            .padding(.horizontal, 12)
-            .frame(width: 280, height: 38)
-            .background(.black, in: Capsule())
-            .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
-            .animation(.easeInOut(duration: 0.25), value: waveColor)
+            Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 84, height: 84)
+                .accessibilityHidden(true)
             Text("Lagoon").font(.title3.weight(.semibold))
             Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.secondary)
         }

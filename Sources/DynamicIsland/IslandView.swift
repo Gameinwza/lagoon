@@ -5,7 +5,6 @@ struct IslandView: View {
     @ObservedObject var state: IslandState
     @ObservedObject var bt: BluetoothWatcher
     @ObservedObject var audio: OutputAudio
-    @State private var showVol = false   // volume slider row inside the expanded card
     @AppStorage(Pref.waveColor) private var waveColor = "blue"
     @AppStorage(Pref.deviceIcons) private var showDevices = true
     @State private var showBT = false   // Bluetooth detail list inside the expanded card
@@ -17,8 +16,8 @@ struct IslandView: View {
     private var banner: BTEvent? { expanded ? nil : bt.event }
     private var size: CGSize {
         if expanded {
-            var rows: CGFloat = showVol ? 50 : 0
-            if showBT { rows += bt.devices.isEmpty ? 40 : bt.devices.reduce(CGFloat(14)) { $0 + ($1.battery != nil ? 96 : 26) } }
+            var rows: CGFloat = 0
+            if showBT { rows += 50 + (bt.devices.isEmpty ? 34 : bt.devices.reduce(CGFloat(8)) { $0 + ($1.battery != nil ? 96 : 26) }) }
             return CGSize(width: 380, height: 118 + Notch.topInset + rows)
         }
         if banner != nil { return CGSize(width: 340, height: Notch.topInset + 40) }
@@ -70,7 +69,7 @@ struct IslandView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.event)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.devices)
         .onChange(of: size, initial: true) { _, s in state.size = s }
-        .onChange(of: expanded) { _, e in if !e { showBT = false; showVol = false } }
+        .onChange(of: expanded) { _, e in if !e { showBT = false } }
         .onChange(of: np.track) { _, t in
             if let t { lastTrack = t; return }
             // Forget the old song once the fade-out has finished (unless something started meanwhile).
@@ -100,7 +99,6 @@ struct IslandView: View {
     /// Expanded-card list: every connected device with its full battery breakdown.
     private var btList: some View {
         VStack(spacing: 8) {
-            Divider().overlay(Color.white.opacity(0.15))
             if bt.devices.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "hifispeaker.fill").frame(width: 18)
@@ -181,12 +179,6 @@ struct IslandView: View {
                 .accessibilityLabel("เปิด \(t.title) ใน \(t.app)")
                 Spacer()
                 Bars(playing: t.playing, color: Pref.color(waveColor))
-                Button { SettingsWindow.show() } label: {
-                    Image(systemName: "gearshape.fill").font(.system(size: 13)).foregroundStyle(.gray)
-                        .frame(width: 26, height: 26).contentShape(Circle())
-                }
-                .buttonStyle(PressStyle()).help("ตั้งค่า Lagoon").accessibilityLabel("ตั้งค่า Lagoon")
-                .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
             }
             if t.duration > 0 { TimelineView(.animation(paused: !t.playing)) { tl in
                 let pos = t.position(at: tl.date)
@@ -203,35 +195,33 @@ struct IslandView: View {
             }
             .frame(maxWidth: .infinity)
             .overlay(alignment: .leading) {
-                Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showVol.toggle(); showBT = false } } label: {
-                    Image(systemName: audio.icon).font(.system(size: 14)).contentTransition(.symbolEffect(.replace))
-                        .frame(width: 40, height: 32)
-                        .background(showVol ? Color.white.opacity(0.15) : .clear, in: Capsule())
-                        .contentShape(Capsule())
+                Button { SettingsWindow.show() } label: {
+                    Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(.gray)
+                        .frame(width: 40, height: 32).contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("ระดับเสียง \(Int(audio.volume * 100))%")
+                .buttonStyle(PressStyle()).help("ตั้งค่า Lagoon").accessibilityLabel("ตั้งค่า Lagoon")
                 .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
                 .offset(x: -12)
             }
             .overlay(alignment: .trailing) {
-                if showDevices {
-                    Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showBT.toggle(); showVol = false } } label: {
+                Group {
+                    Button { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { showBT.toggle() } } label: {
                         Group {
-                            if bt.devices.isEmpty { Image(systemName: "hifispeaker.fill").font(.system(size: 14)) } else { deviceIcons }
+                            if bt.devices.isEmpty || !showDevices {
+                                Image(systemName: audio.icon).font(.system(size: 14)).contentTransition(.symbolEffect(.replace))
+                            } else { deviceIcons }
                         }
                         .padding(.horizontal, 8).frame(minHeight: 32)
                             .background(showBT ? Color.white.opacity(0.15) : .clear, in: Capsule())
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(showBT ? "ซ่อนข้อมูล Bluetooth" : "ดูข้อมูล Bluetooth")
+                    .accessibilityLabel(showBT ? "ซ่อนเสียงและอุปกรณ์" : "เสียงและอุปกรณ์ (ระดับเสียง \(Int(audio.volume * 100))%)")
                     .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
                     .offset(x: 12)  // a bit more breathing room from the Next button
                 }
             }
-            if showVol { volumeRow.transition(.opacity) }
-            if showBT { btList.transition(.opacity) }
+            if showBT { VStack(spacing: 8) { volumeRow; btList }.transition(.opacity) }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 22).padding(.top, Notch.topInset + 4).padding(.bottom, 14)
