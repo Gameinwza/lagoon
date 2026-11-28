@@ -5,10 +5,10 @@ import ServiceManagement
 enum Pref {
     static let waveColor = "waveColor", youtube = "youtube", btBanner = "btBanner",
                deviceIcons = "deviceIcons", hideAfter = "hideAfter", launchAtLogin = "launchAtLogin",
-               autoUpdate = "autoUpdate"
+               autoUpdate = "autoUpdate", timers = "timers"
 
     static let defaults: [String: Any] = [
-        waveColor: "blue", youtube: true, btBanner: true, deviceIcons: true, hideAfter: 3.0, launchAtLogin: true, autoUpdate: true,
+        waveColor: "blue", youtube: true, btBanner: true, deviceIcons: true, hideAfter: 3.0, launchAtLogin: true, autoUpdate: true, timers: true,
     ]
     static func register() {
         UserDefaults.standard.register(defaults: defaults)
@@ -44,13 +44,63 @@ struct SettingsView: View {
     @AppStorage(Pref.hideAfter) private var hideAfter = 3.0
     @AppStorage(Pref.launchAtLogin) private var launchAtLogin = true
     @AppStorage(Pref.autoUpdate) private var autoUpdate = true
+    @AppStorage(Pref.timers) private var timers = true
     @ObservedObject private var updater = Updater.shared
+    @ObservedObject private var reminders = Reminders.shared
+    @State private var note = ""
+    @State private var remindAt = Date.now.addingTimeInterval(3600)
 
     private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        GeometryReader { geo in
+            // Wide (big window / full screen): stage on the left, settings on the right.
+            if geo.size.width >= 760 {
+                HStack(spacing: 0) {
+                    hero.frame(width: min(max(geo.size.width * 0.46, 380), 720))
+                    form.frame(maxWidth: 620).frame(maxWidth: .infinity)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    hero.frame(height: 300)
+                    form
+                }
+            }
+        }
+        .frame(minWidth: 440, minHeight: 480)
+    }
+
+    /// Stage: a small Mac screen floating in a glow of the wave color, with the title underneath.
+    private var hero: some View {
+        GeometryReader { g in
+            // Screen keeps a 16:10 shape and leaves room for the window buttons above and the title below.
+            let w = min(g.size.width - 64, (g.size.height - 190) * 1.6)
+            VStack(spacing: 18) {
+                PreviewScreen(mode: preview, timerEnd: reminders.next?.fireAt, wave: Pref.color(waveColor), showDevices: deviceIcons, scale: w / 420)
+                    .frame(width: w, height: w / 1.6)
+                Picker("ตัวอย่าง", selection: $preview.animation(.spring(response: 0.42, dampingFraction: 0.78))) {
+                    Text("ย่อ").tag(PreviewMode.compact); Text("ขยาย").tag(PreviewMode.expanded)
+                    if timers { Text("ตั้งเวลา").tag(PreviewMode.timer); Text("เตือน").tag(PreviewMode.alert) }
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                titleRow.frame(width: w)
+            }
+            .padding(.top, 20)  // clear of the traffic lights
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background {
+            ZStack {
+                Color(red: 0.04, green: 0.05, blue: 0.1)
+                RadialGradient(colors: [Pref.color(waveColor).opacity(0.35), .clear], center: .center, startRadius: 0, endRadius: 380)
+            }
+            .animation(.easeInOut(duration: 0.4), value: waveColor)
+        }
+        .environment(\.colorScheme, .dark)
+        .clipped()
+        .ignoresSafeArea()  // the stage runs up under the transparent title bar
+    }
+
+    private var form: some View {
             Form {
                 Section("หน้าตา") {
                     LabeledContent { swatches } label: { row("waveform", .blue, "สีคลื่นเสียง") }
@@ -64,6 +114,47 @@ struct SettingsView: View {
                     Toggle(isOn: $btBanner) { row("bell.badge.fill", .orange, "แจ้งเตือนเมื่อ Bluetooth หลุด") }
                     Toggle(isOn: $deviceIcons) { row("airpods", .indigo, "ไอคอนอุปกรณ์ในการ์ด") }
                 }
+                Section("ตั้งเวลา") {
+                    Toggle(isOn: $timers) { row("timer", .orange, "ตั้งเวลาแจ้งเตือน") }
+                        .onChange(of: timers) {
+                            reminders.applyEnabled()
+                            showPreview(timers ? .timer : .expanded)  // show what the feature looks like
+                        }
+                    if timers {
+                        LabeledContent {
+                            TextField("ชื่องาน", text: $note, prompt: Text("ไม่ใส่ก็ได้")).labelsHidden()
+                                .multilineTextAlignment(.trailing).frame(maxWidth: 200)
+                        } label: { row("pencil", .gray, "ชื่องาน") }
+                        LabeledContent {
+                            HStack(spacing: 6) {
+                                ForEach(Reminders.presets, id: \.self) { m in
+                                    Button("\(m)") { reminders.start(minutes: m, label: note); note = ""; showPreview(.timer) }
+                                        .accessibilityLabel("\(m) นาที")
+                                }
+                                Text("นาที").foregroundStyle(.secondary)
+                            }
+                        } label: { row("hourglass", .yellow, "นับถอยหลัง") }
+                        LabeledContent {
+                            HStack(spacing: 6) {
+                                DatePicker("เวลา", selection: $remindAt, displayedComponents: .hourAndMinute).labelsHidden()
+                                Button("เพิ่ม") { addReminder() }
+                            }
+                        } label: { row("bell.fill", .pink, "เตือนตามเวลา") }
+                        ForEach(reminders.sorted) { r in
+                            LabeledContent {
+                                HStack(spacing: 8) {
+                                    TimelineView(.periodic(from: .now, by: 1)) { tl in
+                                        Text("อีก " + Reminders.format(r.fireAt.timeIntervalSince(tl.date)))
+                                            .monospacedDigit().foregroundStyle(.secondary)
+                                    }
+                                    Button("ยกเลิก") { reminders.cancel(r) }
+                                }
+                            } label: {
+                                Text("\(r.label) · \(r.fireAt.formatted(date: .omitted, time: .shortened))").padding(.leading, 34)
+                            }
+                        }
+                    }
+                }
                 Section("ระบบ") {
                     Toggle(isOn: $launchAtLogin) { row("power", .green, "เปิดเองตอนเข้าเครื่อง") }
                         .onChange(of: launchAtLogin) { Pref.applyLaunchAtLogin() }
@@ -71,46 +162,40 @@ struct SettingsView: View {
                         .onChange(of: autoUpdate) { updater.applyAutoCheck() }
                     LabeledContent { updateControl } label: { row("arrow.down.circle.fill", .blue, "อัปเดต") }
                 }
+                Section {
+                    HStack {
+                        Button("คืนค่าเริ่มต้น") { withAnimation { Pref.reset() }; Pref.applyLaunchAtLogin(); updater.applyAutoCheck(); reminders.applyEnabled() }
+                        Spacer()
+                        Button("ปิด Lagoon", role: .destructive) { NSApp.terminate(nil) }
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
             .formStyle(.grouped)
-            .scrollDisabled(true)
-            HStack {
-                Button("คืนค่าเริ่มต้น") { withAnimation { Pref.reset() }; Pref.applyLaunchAtLogin(); updater.applyAutoCheck() }
-                Spacer()
-                Button("ปิด Lagoon", role: .destructive) { NSApp.terminate(nil) }
-            }
-            .controlSize(.large)
-            .padding(.horizontal, 20).padding(.bottom, 18)
-        }
-        .frame(width: 440)
-        .fixedSize()
     }
 
-    @State private var previewExpanded = true
+    @State private var preview = PreviewMode.expanded
 
-    /// Title row plus a live sample: a miniature Mac screen with the island at its notch.
-    private var header: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 10) {
-                Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 36, height: 36)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Lagoon").font(.headline)
-                    if let v = updater.available {
-                        Text("เวอร์ชัน \(version) · มีเวอร์ชันใหม่ \(v)").font(.caption).foregroundStyle(.blue)
-                    } else {
-                        Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.secondary)
-                    }
+    private func addReminder() { reminders.remind(note, at: remindAt); note = ""; showPreview(.timer) }
+    private func showPreview(_ m: PreviewMode) { withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { preview = m } }
+
+    /// App name, version and the compact/expanded switch for the live preview.
+    private var titleRow: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 44, height: 44)
+                .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Lagoon").font(.system(size: 22, weight: .bold, design: .rounded))
+                if let v = updater.available {
+                    Text("เวอร์ชัน \(version) · มีเวอร์ชันใหม่ \(v)").font(.caption.weight(.medium)).foregroundStyle(.cyan)
+                } else {
+                    Text("เวอร์ชัน \(version)").font(.caption).foregroundStyle(.white.opacity(0.7))
                 }
-                Spacer()
-                Picker("ตัวอย่าง", selection: $previewExpanded.animation(.spring(response: 0.42, dampingFraction: 0.78))) {
-                    Text("ย่อ").tag(false); Text("ขยาย").tag(true)
-                }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
             }
-            PreviewScreen(expanded: previewExpanded, wave: Pref.color(waveColor), showDevices: deviceIcons)
+            Spacer()
         }
-        .padding(.horizontal, 20).padding(.top, 34)
+        .foregroundStyle(.white)
     }
 
     /// One control that walks through check → available → installing, with error and up-to-date states.
@@ -169,13 +254,20 @@ enum SettingsWindow {
     private static var window: NSWindow?
     static func show() {
         if window == nil {
-            let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
+            let hc = NSHostingController(rootView: SettingsView())
+            hc.sizingOptions = [.minSize]  // window is resizable; SwiftUI only sets the minimum
+            let w = NSWindow(contentViewController: hc)
             w.title = "ตั้งค่า Lagoon"
-            w.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+            w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            w.collectionBehavior.insert(.fullScreenPrimary)  // green button goes full screen
             w.titlebarAppearsTransparent = true
             w.titleVisibility = .hidden
             w.isReleasedWhenClosed = false
+            // First open: wide enough for two columns, short enough for a 13" screen.
+            let vis = (NSScreen.main?.visibleFrame.size) ?? NSSize(width: 1440, height: 900)
+            w.setContentSize(NSSize(width: min(820, vis.width - 80), height: min(560, vis.height - 80)))
             w.center()
+            w.setFrameAutosaveName("LagoonSettings")  // remember size/position after the user changes it
             window = w
         }
         NSApp.activate(ignoringOtherApps: true)  // only when the user asked for settings
@@ -184,15 +276,23 @@ enum SettingsWindow {
 }
 
 /// Sample of the island on a tiny Mac screen, so settings changes are visible before music plays.
+enum PreviewMode: Hashable { case compact, expanded, timer, alert }
+
 private struct PreviewScreen: View {
-    var expanded: Bool
+    var mode: PreviewMode
+    var timerEnd: Date?  // live countdown when a timer is running, else a sample
     var wave: Color
     var showDevices: Bool
+    var scale: CGFloat
 
     var body: some View {
         ZStack(alignment: .top) {
-            LinearGradient(colors: [Color(red: 0.05, green: 0.2, blue: 0.4), Color(red: 0.1, green: 0.55, blue: 0.7),
-                                    Color(red: 0.45, green: 0.85, blue: 0.8)], startPoint: .top, endPoint: .bottom)
+            Color(red: 0.03, green: 0.06, blue: 0.14)
+            RadialGradient(colors: [wave.opacity(0.5), .clear], center: .top, startRadius: 0, endRadius: 260 * scale)
+            RadialGradient(colors: [Color(red: 0.1, green: 0.75, blue: 0.75).opacity(0.45), .clear],
+                           center: .bottomTrailing, startRadius: 0, endRadius: 300 * scale)
+            RadialGradient(colors: [Color(red: 0.35, green: 0.2, blue: 0.8).opacity(0.35), .clear],
+                           center: .bottomLeading, startRadius: 0, endRadius: 260 * scale)
             // Menu bar with a few placeholder items either side of the notch.
             HStack(spacing: 8) {
                 Image(systemName: "apple.logo").font(.system(size: 9))
@@ -200,26 +300,67 @@ private struct PreviewScreen: View {
                 Spacer()
                 ForEach([14, 14, 34], id: \.self) { w in Capsule().frame(width: CGFloat(w), height: 4) }
             }
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(.white.opacity(0.6))
             .padding(.horizontal, 12).frame(height: 18)
+            .frame(width: 420)  // the screen is 420 pt wide before scaling
             .background(.black.opacity(0.25))
+            .scaleEffect(scale, anchor: .top)
+            .frame(width: 420 * scale, height: 18 * scale, alignment: .top)  // layout at the scaled size
             island
+                .shadow(color: wave.opacity(0.45), radius: 18, y: 6)
+                .scaleEffect(scale, anchor: .top)
         }
-        .frame(height: 170)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.12)))
-        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+        .clipShape(RoundedRectangle(cornerRadius: 14 * scale))
+        .overlay(RoundedRectangle(cornerRadius: 14 * scale).strokeBorder(.white.opacity(0.14)))
+        .shadow(color: .black.opacity(0.5), radius: 30, y: 14)
+        .shadow(color: wave.opacity(0.25), radius: 40)
+        .animation(.easeInOut(duration: 0.4), value: wave)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("ตัวอย่างเกาะ")
     }
 
     private var island: some View {
-        ZStack(alignment: .top) {
-            UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 22 : 10, bottomTrailingRadius: expanded ? 22 : 10).fill(.black)
-            if expanded { card.transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top))) }
-            else { compact.transition(.opacity) }
+        let (w, h, r): (CGFloat, CGFloat, CGFloat) = switch mode {
+            case .expanded: (250, 96, 22)
+            case .alert: (230, 34, 16)
+            case .compact, .timer: (170, 22, 10)
         }
-        .frame(width: expanded ? 250 : 170, height: expanded ? 112 : 22)
+        return ZStack(alignment: .top) {
+            UnevenRoundedRectangle(bottomLeadingRadius: r, bottomTrailingRadius: r).fill(.black)
+            switch mode {
+            case .expanded: card.transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
+            case .compact: compact.transition(.opacity)
+            case .timer: timer.transition(.opacity)
+            case .alert: alert.transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .frame(width: w, height: h)
+    }
+
+    private var timer: some View {
+        HStack {
+            Image(systemName: "timer").font(.system(size: 9, weight: .bold))
+            Spacer()
+            TimelineView(.periodic(from: .now, by: 1)) { tl in
+                Text(timerEnd.map { Reminders.format($0.timeIntervalSince(tl.date)) } ?? "25:00")
+                    .font(.system(size: 9, weight: .semibold).monospacedDigit())
+            }
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 9).frame(height: 22)
+    }
+
+    private var alert: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "bell.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(.orange)
+                .symbolEffect(.bounce, options: .repeat(2), value: mode)
+            Text("ถึงเวลาแล้ว").font(.system(size: 10, weight: .semibold))
+            Spacer()
+            Text("ปิด").font(.system(size: 9, weight: .semibold))
+                .padding(.horizontal, 7).padding(.vertical, 2).background(.white.opacity(0.15), in: Capsule())
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12).padding(.top, 10)  // below the notch, like the real banner
     }
 
     private var art: some View {
@@ -258,6 +399,6 @@ private struct PreviewScreen: View {
             .font(.system(size: 11))
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
+        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 12)
     }
 }

@@ -8,6 +8,7 @@ import ServiceManagement
 final class IslandState: ObservableObject {
     @Published var hover = false
     var size = CGSize(width: 200, height: 32)
+    var shiftX: CGFloat = 0  // island center offset from the screen center (timer grows it rightward)
     @Published var screenChanges = 0
 }
 
@@ -15,7 +16,7 @@ final class IslandState: ObservableObject {
 /// It stays a fixed size (resizing a window mid-animation is what made it stutter) and
 /// becomes click-through outside the island so it never blocks the menu bar.
 final class IslandPanel: NSPanel {
-    static let maxSize = CGSize(width: 420, height: 320)  // room for the Bluetooth list
+    static let maxSize = CGSize(width: 520, height: 320)  // room for the Bluetooth list and a right-shifted timer
 
     init(view: NSView) {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
@@ -84,11 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func trackMouse() {
         let f = panel.screenForIsland.frame, s = state.size
-        let hot = NSRect(x: f.midX - s.width / 2, y: f.maxY - s.height, width: s.width, height: s.height)
+        let hot = NSRect(x: f.midX - s.width / 2 + state.shiftX, y: f.maxY - s.height, width: s.width, height: s.height)
             .insetBy(dx: -6, dy: -6)
         let inside = hot.contains(NSEvent.mouseLocation)
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
-        let hover = inside && np.track != nil
+        let hover = inside && (np.track != nil || !Reminders.shared.items.isEmpty)  // timers get a card too
         if hover != state.hover {
             withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { state.hover = hover }
         }

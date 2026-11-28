@@ -4,5 +4,8 @@ import PackageDescription
 let package = Package(
     name: "DynamicIsland",
     platforms: [.macOS(.v14)],
-    targets: [.executableTarget(name: "DynamicIsland")]
+    targets: [
+        .executableTarget(name: "DynamicIsland"),
+        .testTarget(name: "DynamicIslandTests", dependencies: ["DynamicIsland"]),
+    ]
 )

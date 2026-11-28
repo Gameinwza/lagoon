@@ -6,26 +6,37 @@ struct IslandView: View {
     @ObservedObject var bt: BluetoothWatcher
     @ObservedObject var audio: OutputAudio
     @ObservedObject private var updater = Updater.shared
+    @ObservedObject private var reminders = Reminders.shared
     @AppStorage(Pref.waveColor) private var waveColor = "blue"
     @AppStorage(Pref.deviceIcons) private var showDevices = true
     @State private var showBT = false   // Bluetooth detail list inside the expanded card
+    @State private var speakerHover = false
     @State private var lastTrack: Track?  // kept while the island fades out after the music stops
     private var shown: Track? { np.track ?? lastTrack }
-    private var hidden: Bool { np.track == nil && banner == nil }
+    private var hidden: Bool { np.track == nil && banner == nil && reminders.next == nil && reminders.ringing.isEmpty }
 
-    private var expanded: Bool { state.hover && np.track != nil }
+    private var expanded: Bool { state.hover && (np.track != nil || !reminders.items.isEmpty) && reminders.ringing.isEmpty }
+    /// A running timer adds its time (and "+N") on the right of the camera, so only that side grows.
+    private var extraRight: CGFloat {
+        reminders.next != nil && !expanded && banner == nil && reminders.ringing.isEmpty ? 60 : 0
+    }
+    /// Rows of running timers shown in the expanded card (capped so the card fits the panel).
+    private var taskRows: Int { min(reminders.items.count, np.track == nil ? 6 : (showBT ? 0 : 3)) }
     private var banner: BTEvent? { expanded ? nil : bt.event }
     private var size: CGSize {
+        if !reminders.ringing.isEmpty { return CGSize(width: 340, height: Notch.topInset + 40) }
+        if expanded && np.track == nil { return CGSize(width: 340, height: Notch.topInset + 26 + CGFloat(taskRows) * 28) }
         if expanded {
             var rows: CGFloat = 0
             if showBT { rows += 50 + (bt.devices.isEmpty ? 34 : bt.devices.reduce(CGFloat(8)) { $0 + ($1.battery != nil ? 96 : 26) }) }
-            return CGSize(width: 380, height: 118 + Notch.topInset + rows)
+            if taskRows > 0 { rows += 10 + CGFloat(taskRows) * 28 }
+            return CGSize(width: 380, height: 124 + Notch.topInset + rows)
         }
         if banner != nil { return CGSize(width: 340, height: Notch.topInset + 40) }
         // Device icons only appear in the expanded card, not here.
         // On a notch the art and wave sit either side of the camera, so wider notches get a wider island.
-        let compact = Notch.present ? max(280, Notch.width + 100) : 260
-        return shown == nil ? CGSize(width: 200, height: 32) : CGSize(width: compact, height: 32)
+        let compact = (Notch.present ? max(280, Notch.width + 100) : 260) + extraRight
+        return shown == nil && reminders.next == nil ? CGSize(width: 200, height: 32) : CGSize(width: compact, height: 32)
     }
     // Notch: square top that merges with the camera housing. No notch: a floating, fully rounded pill.
     private var islandRadius: CGFloat { expanded ? 32 : banner != nil ? 22 : Notch.present ? 14 : 16 }
@@ -43,6 +54,20 @@ struct IslandView: View {
                 Button("อัปเดตเป็น \(v)") { Updater.shared.install() }
                 Divider()
             }
+            if Pref.bool(Pref.timers) {
+                Menu("ตั้งเวลา") {
+                    ForEach(Reminders.presets, id: \.self) { m in Button("\(m) นาที") { reminders.start(minutes: m) } }
+                    Divider()
+                    Button("เตือนตามเวลา…") { SettingsWindow.show() }
+                    if !reminders.items.isEmpty {
+                        Divider()
+                        ForEach(reminders.sorted) { r in
+                            Button("ยกเลิก \(r.label) · \(r.fireAt.formatted(date: .omitted, time: .shortened))") { reminders.cancel(r) }
+                        }
+                    }
+                }
+                Divider()
+            }
             Button("ตั้งค่า…") { SettingsWindow.show() }
         }
     }
@@ -53,7 +78,11 @@ struct IslandView: View {
                 UnevenRoundedRectangle(topLeadingRadius: islandTop, bottomLeadingRadius: islandRadius,
                                        bottomTrailingRadius: islandRadius, topTrailingRadius: islandTop)
                     .fill(.black)
-                if let e = banner {
+                if let r = reminders.ringing.first {
+                    ringBanner(r, more: reminders.ringing.count - 1).transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else if expanded && np.track == nil {
+                    taskCard.transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
+                } else if let e = banner {
                     btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
                 } else if let t = shown {
                     if expanded {
@@ -61,6 +90,8 @@ struct IslandView: View {
                     } else {
                         compact(t).transition(.opacity)
                     }
+                } else if let n = reminders.next {
+                    timerCompact(n).transition(.opacity)
                 }
             }
             .frame(width: size.width, height: size.height)
@@ -68,6 +99,7 @@ struct IslandView: View {
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: islandTop, bottomLeadingRadius: islandRadius,
                                               bottomTrailingRadius: islandRadius, topTrailingRadius: islandTop))
             .shadow(color: .black.opacity(Notch.present ? 0 : 0.3), radius: 10, y: 4)
+            .offset(x: extraRight / 2)  // keep the left edge put; grow to the right only
             .padding(.top, Notch.present ? 0 : Notch.floatGap)
             // Music closed (or paused > 5 min): shrink slightly and fade out, keeping the last song on
             // screen while it goes so nothing pops.
@@ -80,7 +112,10 @@ struct IslandView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: np.track?.title)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.event)
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.devices)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: reminders.ringing)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: reminders.items)
         .onChange(of: size, initial: true) { _, s in state.size = s }
+        .onChange(of: extraRight, initial: true) { _, x in state.shiftX = x / 2 }
         .onChange(of: expanded) { _, e in if !e { showBT = false } }
         .onChange(of: np.track) { _, t in
             if let t { lastTrack = t; return }
@@ -172,8 +207,79 @@ struct IslandView: View {
     }
 
     private func compact(_ t: Track) -> some View {
-        HStack { art(20); Spacer(); Bars(playing: t.playing, color: Pref.color(waveColor)) }
-            .padding(.horizontal, 12).frame(height: 32)
+        HStack {
+            art(20); Spacer()
+            if let n = reminders.next { countdown(n).font(.system(size: 12, weight: .semibold).monospacedDigit()) }
+            Bars(playing: t.playing, color: Pref.color(waveColor))
+        }
+        .padding(.horizontal, 12).frame(height: 32)
+    }
+
+    /// No music, a timer running: timer icon left of the notch, time left on the right.
+    private func timerCompact(_ n: Reminder) -> some View {
+        HStack {
+            Image(systemName: "timer").font(.system(size: 14, weight: .semibold)).foregroundStyle(.orange)
+            Spacer()
+            countdown(n).font(.system(size: 13, weight: .semibold).monospacedDigit())
+            if reminders.items.count > 1 {  // more timers waiting: hover to see them all
+                Text("+\(reminders.items.count - 1)").font(.system(size: 11, weight: .semibold)).foregroundStyle(.gray)
+            }
+        }
+        .padding(.horizontal, 14).frame(height: 32)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("ตั้งเวลา \(n.label)")
+    }
+
+    /// Time left, ticking once a second only while it is on screen.
+    private func countdown(_ n: Reminder) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { tl in
+            Text(Reminders.format(n.fireAt.timeIntervalSince(tl.date))).foregroundStyle(.orange)
+        }
+    }
+
+    /// Every running timer, soonest first, each with its own cancel button.
+    private var taskList: some View {
+        VStack(spacing: 0) {
+            ForEach(reminders.sorted.prefix(taskRows)) { r in
+                HStack(spacing: 8) {
+                    Image(systemName: "timer").font(.system(size: 12, weight: .semibold)).foregroundStyle(.orange).frame(width: 18)
+                    Text(r.label).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    Spacer()
+                    countdown(r).font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    Button { reminders.cancel(r) } label: {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundStyle(.gray)
+                    }
+                    .buttonStyle(PressStyle())
+                    .accessibilityLabel("ยกเลิก \(r.label)")
+                }
+                .frame(height: 28)
+            }
+        }
+    }
+
+    private var taskCard: some View {
+        taskList
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20).padding(.top, Notch.topInset + 10).padding(.bottom, 14)
+    }
+
+    private func ringBanner(_ r: Reminder, more: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "bell.fill").font(.system(size: 15, weight: .semibold)).foregroundStyle(.orange)
+                .symbolEffect(.bounce, options: .repeat(3), value: r.id)
+            Text(r.label).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+            if more > 0 { Text("+\(more)").font(.system(size: 12, weight: .semibold)).foregroundStyle(.gray) }
+            Spacer()
+            Button("ปิด") { reminders.stopRinging() }
+                .buttonStyle(.plain).font(.system(size: 12, weight: .semibold))
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(.white.opacity(0.15), in: Capsule())
+                .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 18).frame(height: 40)
+        .padding(.top, Notch.topInset)  // drop the row below the notch
+        .accessibilityElement(children: .contain)
     }
 
     private func full(_ t: Track) -> some View {
@@ -224,19 +330,20 @@ struct IslandView: View {
                             } else { deviceIcons }
                         }
                         .padding(.horizontal, 8).frame(minHeight: 32)
-                            .background(showBT ? Color.white.opacity(0.15) : .clear, in: Capsule())
+                            .background(.white.opacity(showBT ? 0.15 : speakerHover ? 0.12 : 0), in: Capsule())  // same hover as the transport buttons
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(showBT ? "ซ่อนเสียงและอุปกรณ์" : "เสียงและอุปกรณ์ (ระดับเสียง \(Int(audio.volume * 100))%)")
-                    .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
+                    .onHover { h in withAnimation(.easeOut(duration: 0.15)) { speakerHover = h }; h ? NSCursor.pointingHand.push() : NSCursor.pop() }
                     .offset(x: 12)  // a bit more breathing room from the Next button
                 }
             }
             if showBT { VStack(spacing: 8) { volumeRow; btList }.transition(.opacity) }
+            if taskRows > 0 { taskList.padding(.top, 2).transition(.opacity) }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 22).padding(.top, Notch.topInset + 4).padding(.bottom, 14)
+        .padding(.horizontal, 22).padding(.top, Notch.topInset + 4).padding(.bottom, 20)
     }
 
     /// Mute toggle + live volume slider for the current output device.
