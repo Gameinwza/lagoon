@@ -72,34 +72,46 @@ struct IslandView: View {
         }
     }
 
+    /// What the island shows right now, most urgent first.
+    @ViewBuilder private var content: some View {
+        if let r = reminders.ringing.first {
+            ringBanner(r, more: reminders.ringing.count - 1).transition(.opacity.combined(with: .scale(scale: 0.9)))
+        } else if expanded && np.track == nil {
+            taskCard.transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
+        } else if let e = banner {
+            btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
+        } else if let t = shown {
+            if expanded {
+                full(t).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
+            } else {
+                compact(t).transition(.opacity)
+            }
+        } else if let n = reminders.next {
+            timerCompact(n).transition(.opacity)
+        }
+    }
+
+    /// The black island itself, sized and clipped.
+    private var shape: some View {
+    ZStack(alignment: .top) {
+        UnevenRoundedRectangle(topLeadingRadius: islandTop, bottomLeadingRadius: islandRadius,
+                               bottomTrailingRadius: islandRadius, topTrailingRadius: islandTop)
+            .fill(.black)
+        content
+    }
+    .frame(width: size.width, height: size.height)
+    // Content never shows outside the island, so icons vanish with it instead of trailing behind.
+    .clipShape(UnevenRoundedRectangle(topLeadingRadius: islandTop, bottomLeadingRadius: islandRadius,
+                                      bottomTrailingRadius: islandRadius, topTrailingRadius: islandTop))
+    .shadow(color: .black.opacity(Notch.present ? 0 : 0.3), radius: 10, y: 4)
+    .offset(x: extraRight / 2)  // keep the left edge put; grow to the right only
+    }
+
+    private static let spring = Animation.spring(response: 0.42, dampingFraction: 0.78)
+
     private var island: some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .top) {
-                UnevenRoundedRectangle(topLeadingRadius: islandTop, bottomLeadingRadius: islandRadius,
-                                       bottomTrailingRadius: islandRadius, topTrailingRadius: islandTop)
-                    .fill(.black)
-                if let r = reminders.ringing.first {
-                    ringBanner(r, more: reminders.ringing.count - 1).transition(.opacity.combined(with: .scale(scale: 0.9)))
-                } else if expanded && np.track == nil {
-                    taskCard.transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
-                } else if let e = banner {
-                    btBanner(e).transition(.opacity.combined(with: .scale(scale: 0.9)))
-                } else if let t = shown {
-                    if expanded {
-                        full(t).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
-                    } else {
-                        compact(t).transition(.opacity)
-                    }
-                } else if let n = reminders.next {
-                    timerCompact(n).transition(.opacity)
-                }
-            }
-            .frame(width: size.width, height: size.height)
-            // Content never shows outside the island, so icons vanish with it instead of trailing behind.
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: islandTop, bottomLeadingRadius: islandRadius,
-                                              bottomTrailingRadius: islandRadius, topTrailingRadius: islandTop))
-            .shadow(color: .black.opacity(Notch.present ? 0 : 0.3), radius: 10, y: 4)
-            .offset(x: extraRight / 2)  // keep the left edge put; grow to the right only
+            shape
             .padding(.top, Notch.present ? 0 : Notch.floatGap)
             // Music closed (or paused > 5 min): shrink slightly and fade out, keeping the last song on
             // screen while it goes so nothing pops.
@@ -109,11 +121,11 @@ struct IslandView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: np.track?.title)
-        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.event)
-        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: bt.devices)
-        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: reminders.ringing)
-        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: reminders.items)
+        .animation(Self.spring, value: np.track?.title)
+        .animation(Self.spring, value: bt.event)
+        .animation(Self.spring, value: bt.devices)
+        .animation(Self.spring, value: reminders.ringing)
+        .animation(Self.spring, value: reminders.items)
         .onChange(of: size, initial: true) { _, s in state.size = s }
         .onChange(of: extraRight, initial: true) { _, x in state.shiftX = x / 2 }
         .onChange(of: expanded) { _, e in if !e { showBT = false } }

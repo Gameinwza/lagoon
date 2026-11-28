@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 main() {
   echo "== $(date '+%F %T') checking for updates"
 
-  git fetch -q origin main
+  git fetch -q --tags origin main  # tags: build.sh takes the version from the latest one
   LOCAL=$(git rev-parse HEAD)
   REMOTE=$(git rev-parse origin/main)
   [ "$LOCAL" = "$REMOTE" ] && { echo "up to date ($LOCAL)"; exit 0; }

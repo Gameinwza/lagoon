@@ -164,12 +164,17 @@ struct SettingsView: View {
                 }
                 Section {
                     HStack {
-                        Button("คืนค่าเริ่มต้น") { withAnimation { Pref.reset() }; Pref.applyLaunchAtLogin(); updater.applyAutoCheck(); reminders.applyEnabled() }
+                        Button { withAnimation { Pref.reset() }; Pref.applyLaunchAtLogin(); updater.applyAutoCheck(); reminders.applyEnabled() } label: {
+                            Label("คืนค่าเริ่มต้น", systemImage: "arrow.counterclockwise")
+                        }
                         Spacer()
-                        Button("ปิด Lagoon", role: .destructive) { NSApp.terminate(nil) }
+                        Button(role: .destructive) { NSApp.terminate(nil) } label: {
+                            Label("ปิด Lagoon", systemImage: "power").foregroundStyle(.red)
+                        }
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.bordered).controlSize(.large)
                 }
+                .listRowBackground(Color.clear)  // plain buttons, not a settings row
             }
             .formStyle(.grouped)
     }
